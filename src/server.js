@@ -9,6 +9,9 @@
 
 const compiler = require("./compiler");
 const schemas = require("./schemas");
+const checks = require("./checks");
+const sessions = require("./sessions");
+const nav = require("./nav");
 
 const SERVER_INFO = { name: "blade-mcp", version: "0.1.0" };
 
@@ -41,6 +44,33 @@ async function loadSdk() {
 }
 
 const TOOLS = [
+  {
+    name: "blade_check",
+    description:
+      "Typecheck Blade source and return its diagnostics, bindings, and deduced facts. Pass `file`, `source`, or both (both = check unsaved text at that path); bare `source` is checked inline at a synthetic path and never written to disk. Spans are 1-based with an EXCLUSIVE endCol. Output is trimmed for agents: the span-heavy references/calls/kernels/providers tables are omitted unless you pass raw:true. Diagnostic codes (BLxxxx) can be expanded with blade_explain.",
+    inputSchema: schemas.bladeCheck,
+    handler: checks.bladeCheck,
+  },
+  {
+    name: "blade_eval",
+    description:
+      "Evaluate Blade source in a persistent REPL session and return its output, bindings with values, and any plots as image content. Bindings accumulate across calls sharing a `session` key (append, or rebind-in-place by top-level name). The interpreter lane is fast; a fallback lane invokes g++, hence the generous default timeout.",
+    inputSchema: schemas.bladeEval,
+    handler: sessions.bladeEval,
+  },
+  {
+    name: "blade_reset_session",
+    description: "Discard a blade_eval session's accumulated bindings (Restart Kernel). The next eval in that session starts empty.",
+    inputSchema: schemas.bladeResetSession,
+    handler: sessions.bladeResetSession,
+  },
+  {
+    name: "blade_symbols",
+    description:
+      "Look up Blade symbols BY NAME in a file or snippet: definition span, type (and concrete type at tier full), use count, and every use span. Merges the compiler's binder table with its reference table. Filter with `name` (exact, then case-insensitive substring) and/or `kind`.",
+    inputSchema: schemas.bladeSymbols,
+    handler: nav.bladeSymbols,
+  },
   {
     name: "blade_doctor",
     description:
