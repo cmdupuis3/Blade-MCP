@@ -1,0 +1,23 @@
+{
+  "name": "blade-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP stdio server for the Blade array-functional language: check/eval/doctor/symbols adapters over `blade ide serve`, plus diagnostics and corpus knowledge tools.",
+  "license": "MIT",
+  "main": "src/server.js",
+  "bin": {
+    "blade-mcp": "src/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/",
+    "test:integration": "node --test test/integration/",
+    "vendor:protocol": "npm pack ../Blade/protocol --pack-destination vendor"
+  },
+  "dependencies": {
+    "@blade-lang/ide-protocol": "file:stub/ide-protocol",
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}
