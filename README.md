@@ -107,7 +107,7 @@ Copy `.mcp.json.example`, or add this to your MCP client config:
 | `BLADE_EXE` | Compiler binary to use (when `--compiler` is not passed). |
 | `BLADE_REPO` | Blade checkout root. Enables `blade-docs://` doc resources and `examples/` paths. |
 | `BLADE_CORPUS_DIR` | Override the `tests/corpus` root. |
-| `BLADE_MCP_TEST_SERVE` | **Test only.** `"<exe> <args...>"` spawned instead of a compiler, for driving the server against a fake. |
+| `BLADE_MCP_TEST_SERVE` | **Test only.** `<exe> <args...>` spawned instead of a compiler, for driving the server against a fake. An exe path containing spaces works either quoted (`"C:\Program Files\nodejs\node.exe" fake-serve.js`) or bare; argument paths must not contain spaces. |
 
 ### Compiler discovery
 

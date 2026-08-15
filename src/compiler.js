@@ -42,7 +42,19 @@ class UserError extends Error {
   }
 }
 
-/** `BLADE_MCP_TEST_SERVE` -> {exe, args}. Honors one leading "quoted path". */
+/**
+ * `BLADE_MCP_TEST_SERVE` -> {exe, args}.
+ *
+ * A leading "quoted path" always wins. Unquoted, the first token is the exe —
+ * except that on Windows the natural thing to pass is process.execPath, which
+ * is routinely `C:\Program Files\nodejs\node.exe`. So when the first token is
+ * not itself an existing file, grow the exe across tokens until one names a
+ * real file; if none does, fall back to the plain first-token split (which is
+ * what a bare command like `node` needs).
+ *
+ * Arguments containing spaces are not supported unquoted — quote the exe and
+ * keep argument paths space-free.
+ */
 function splitTestServe(raw) {
   if (!raw || typeof raw !== "string" || raw.trim() === "") return undefined;
   const text = raw.trim();
@@ -52,6 +64,12 @@ function splitTestServe(raw) {
     return { exe: quoted[1], args: rest === "" ? [] : rest.split(/\s+/) };
   }
   const parts = text.split(/\s+/);
+  if (parts.length > 1 && !fs.existsSync(parts[0])) {
+    for (let n = 2; n <= parts.length; n++) {
+      const candidate = parts.slice(0, n).join(" ");
+      if (fs.existsSync(candidate)) return { exe: candidate, args: parts.slice(n) };
+    }
+  }
   return { exe: parts[0], args: parts.slice(1) };
 }
 
