@@ -1,0 +1,9 @@
+// TEST: Extent Mismatch Direct (rejects)
+// A named array whose declared extent is shorter than the parameter's
+// annotated extent must be refused before codegen bakes the literal extent
+// into the emitted subscripts. Mirrors tests/corpus/diagnostics/069 in the
+// real Blade corpus, trimmed for the MCP test fixtures.
+// ERROR: BL3016
+function f(w: Array<Float64 like Idx<4>>) -> Float64 = w(0) + w(1) + w(2) + w(3)
+let a: Array<Float64 like Idx<2>> = [1.0, 2.0]
+let r = f(a)
