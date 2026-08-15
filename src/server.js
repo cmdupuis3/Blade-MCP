@@ -12,6 +12,9 @@ const schemas = require("./schemas");
 const checks = require("./checks");
 const sessions = require("./sessions");
 const nav = require("./nav");
+const knowledge = require("./knowledge");
+const corpus = require("./corpus");
+const resources = require("./resources");
 
 const SERVER_INFO = { name: "blade-mcp", version: "0.1.0" };
 
@@ -78,6 +81,20 @@ const TOOLS = [
     inputSchema: schemas.bladeDoctor,
     handler: compiler.bladeDoctor,
   },
+  {
+    name: "blade_explain",
+    description:
+      "Explain a Blade diagnostic code (BLxxxx): its title and compiler phase, a curated explanation and fix when one exists, and real corpus files that pin exactly this refusal. Blade's refusals are a feature — they reject a plausible-but-wrong fast path — so the fix is almost always to correct a declaration, not to cast around the error.",
+    inputSchema: schemas.bladeExplain,
+    handler: knowledge.bladeExplain,
+  },
+  {
+    name: "blade_corpus_find",
+    description:
+      "Find idiomatic Blade. `intent` (\"running state\", \"filter rows\", \"sliding window\") is the one to reach for when you know WHAT you want to write but not HOW — it scores a curated idiom index that names the right construct and the files demonstrating it, falling through to a content search. Also supports `query` (grep), `category` (a corpus directory), and `code` (files pinning a BLxxxx). With no arguments it lists every category with live file counts.",
+    inputSchema: schemas.bladeCorpusFind,
+    handler: corpus.bladeCorpusFind,
+  },
 ];
 
 function publicTool(tool) {
@@ -103,13 +120,19 @@ async function dispatchTool(name, args, ctx) {
 async function createServer(ctx) {
   const sdk = await loadSdk();
   const { Server, types } = sdk;
-  const server = new Server(SERVER_INFO, { capabilities: { tools: {} } });
+  const server = new Server(SERVER_INFO, { capabilities: { tools: {}, resources: {} } });
 
   server.setRequestHandler(types.ListToolsRequestSchema, async () => ({ tools: TOOLS.map(publicTool) }));
 
   server.setRequestHandler(types.CallToolRequestSchema, async (request) =>
     dispatchTool(request.params.name, request.params.arguments || {}, ctx)
   );
+
+  // The resource list is shorter without a Blade checkout (docs/ is repo-only);
+  // the capability itself is always declared so clients need not re-negotiate.
+  server.setRequestHandler(types.ListResourcesRequestSchema, async () => ({ resources: resources.list(ctx) }));
+
+  server.setRequestHandler(types.ReadResourceRequestSchema, async (request) => resources.read(request.params.uri, ctx));
 
   return { server, sdk };
 }
