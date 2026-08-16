@@ -57,7 +57,7 @@ const TOOLS = [
   {
     name: "blade_eval",
     description:
-      "Evaluate Blade source in a persistent REPL session and return its output, bindings with values, and any plots as image content. Bindings accumulate across calls sharing a `session` key (append, or rebind-in-place by top-level name). The interpreter lane is fast; a fallback lane invokes g++, hence the generous default timeout.",
+      "Evaluate Blade source in a persistent REPL session and return its output, bindings with values, and any plots as image content. Plots are real PNG images (rendered through GR, sized with `plotWidth`/`plotHeight`) whenever a GR runtime is available; without one they degrade to the figure's JSON and `plotRenderNote` says why. Bindings accumulate across calls sharing a `session` key (append, or rebind-in-place by top-level name). The interpreter lane is fast; a fallback lane invokes g++, hence the generous default timeout.",
     inputSchema: schemas.bladeEval,
     handler: sessions.bladeEval,
   },
@@ -77,7 +77,7 @@ const TOOLS = [
   {
     name: "blade_doctor",
     description:
-      "Report the Blade toolchain's health: `blade doctor --json` (g++, BLAS/LAPACK, NetCDF, MPI, CUDA, ...) plus which compiler binary this server resolved and how, whether `ide serve` answers, the protocol version, and any skew between the binary's version and the language surface this server was built against. Works even when the compiler is missing or broken — that is what it is for.",
+      "Report the Blade toolchain's health: `blade doctor --json` (g++, BLAS/LAPACK, NetCDF, MPI, CUDA, ...) plus which compiler binary this server resolved and how, whether `ide serve` answers, the protocol version, whether a GR runtime was found (which is what makes blade_eval return plots as images), and any skew between the binary's version and the language surface this server was built against. Works even when the compiler is missing or broken — that is what it is for.",
     inputSchema: schemas.bladeDoctor,
     handler: compiler.bladeDoctor,
   },

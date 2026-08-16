@@ -73,6 +73,42 @@ test(
       assert.ok(["interp", "gpp"].includes(s.lane), `unexpected lane: ${s.lane}`);
     });
 
+    await t.test("blade_eval: a real plot comes back as a real PNG (needs GR)", async (t2) => {
+      const gr = ctx.grRuntime();
+      if (!gr.ok) {
+        t2.skip(`no GR runtime for this environment (${gr.reason}); set BLADE_GR_PATH to render plots as images`);
+        return;
+      }
+      // Blade has no list comprehensions — an index range mapped through a
+      // lambda is the idiomatic way to build the arrays.
+      const result = await server.dispatchTool(
+        "blade_eval",
+        {
+          session: "plot-integration",
+          source: [
+            "import plot",
+            "let px = method_for(range<Idx<8>>) <@> lambda(i) -> 1.0 * i |> compute",
+            "let py = method_for(range<Idx<8>>) <@> lambda(i) -> 1.0 * i * i |> compute",
+            'let plotted = plot.line(px, py, "integration check": title)',
+          ].join("\n"),
+        },
+        ctx
+      );
+      assert.equal(result.isError, undefined, () => JSON.stringify(result.structuredContent));
+      const s = result.structuredContent;
+      if (s.exitCode !== 0 || s.displayFrames === 0) {
+        t2.skip(`this compiler produced no display frame (exitCode=${s.exitCode}, diagnostics=${JSON.stringify(s.diagnostics)}) — it likely predates the plot module`);
+        return;
+      }
+      assert.equal(s.plotsRendered, 1, () => `expected one GR render, got: ${JSON.stringify(s)}`);
+      const image = result.content.find((c) => c.type === "image");
+      assert.ok(image, "the figure must arrive as an image block");
+      const bytes = Buffer.from(image.data, "base64");
+      assert.equal(bytes.slice(1, 4).toString("ascii"), "PNG", "the render must be a real PNG");
+      assert.equal(bytes.readUInt32BE(16), 800, "default render width");
+      assert.equal(bytes.readUInt32BE(20), 600, "default render height");
+    });
+
     await t.test("blade_reset_session: {ok:true}", async () => {
       const result = await server.dispatchTool("blade_reset_session", {}, ctx);
       assert.equal(result.isError, undefined, () => JSON.stringify(result.structuredContent));

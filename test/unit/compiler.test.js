@@ -11,6 +11,7 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 
 const compiler = require("../../src/compiler");
+const { makeFakeGrRoot, NO_SUCH_GR } = require("../helpers");
 
 function fakePkg(overrides) {
   const o = overrides || {};
@@ -167,6 +168,61 @@ test("getClient(): a lazy singleton — only constructed once per context", () =
   const b = ctx.getClient();
   assert.equal(a, b);
   assert.equal(constructCount, 1);
+});
+
+// --- GR plumbing ----------------------------------------------------------------
+
+test("grRuntime(): BLADE_GR_PATH at a valid tree resolves, and getClient passes a GR env FUNCTION", () => {
+  const gr = makeFakeGrRoot();
+  let seenDeps;
+  try {
+    const ctx = compiler.createContext({
+      env: { BLADE_GR_PATH: gr.root, PATH: "C:/windows", GR_DISPLAY: "gksqt" },
+      pkg: fakePkg({
+        createClient: (deps) => {
+          seenDeps = deps;
+          return { available: () => "unknown" };
+        },
+      }),
+    });
+    assert.equal(ctx.grRuntime().ok, true);
+    assert.equal(ctx.grRuntime().grdir, gr.root);
+
+    ctx.getClient();
+    // A function, not an object: the protocol client re-reads it per spawn.
+    assert.equal(typeof seenDeps.env, "function");
+    const childEnv = seenDeps.env();
+    assert.equal(childEnv.GRDIR, gr.root);
+    assert.equal(childEnv.GKS_WSTYPE, "100");
+    assert.equal(childEnv.GR_DISPLAY, undefined, "GR_DISPLAY must be removed or a stray Qt process can spawn");
+    assert.ok(childEnv.PATH.startsWith(path.join(gr.root, "bin") + path.delimiter), "the GR bin dir must come FIRST on PATH");
+    assert.match(childEnv.PATH, /C:\/windows$/, "the inherited PATH must survive");
+  } finally {
+    gr.dispose();
+  }
+});
+
+test("grRuntime(): with no GR anywhere, deps.env returns undefined — plain inheritance, the pre-GR behavior", () => {
+  let seenDeps;
+  const ctx = compiler.createContext({
+    env: { BLADE_GR_PATH: NO_SUCH_GR },
+    pkg: fakePkg({
+      createClient: (deps) => {
+        seenDeps = deps;
+        return { available: () => "unknown" };
+      },
+    }),
+  });
+  const g = ctx.grRuntime();
+  assert.equal(g.ok, false);
+  assert.match(g.reason, /BLADE_GR_PATH/);
+  ctx.getClient();
+  assert.equal(seenDeps.env(), undefined);
+});
+
+test("grRuntime(): resolved once and cached (an existsSync sweep per spawn would be waste)", () => {
+  const ctx = compiler.createContext({ env: { BLADE_GR_PATH: NO_SUCH_GR }, pkg: fakePkg() });
+  assert.equal(ctx.grRuntime(), ctx.grRuntime());
 });
 
 // --- tool result / error shapes -------------------------------------------------

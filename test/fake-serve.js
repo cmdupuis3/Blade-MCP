@@ -21,6 +21,27 @@
 //   "display" on "eval", emit a {"event":"display"} line BEFORE the eval
 //            response — proves a client must not let an event with the
 //            in-flight id settle that request (docs/display-frames.md).
+//   "plot"   on "eval", return a plotly figure frame inline in the response's
+//            `display` array — the frame blade-mcp is expected to upgrade to a
+//            GR image via "renderPlot".
+//   "plot-renderfail"
+//            same eval, but "renderPlot" answers {"id","error"} — a live
+//            compiler that cannot reach GR. Proves the fallback to text.
+//   "plot-huge"
+//            same eval, but "renderPlot" answers with a >1MB PNG — proves the
+//            inline-image cap still applies to a render.
+//   "plot-oldcompiler"
+//            same eval, but "renderPlot" is not implemented at all (the
+//            unknown-cmd answer a compiler predating the verb gives).
+//   "plot-raster"
+//            on "eval", return an image/png frame the PROGRAM produced — must
+//            reach the client untouched, with no renderPlot round trip.
+//
+// "renderPlot" is answered in every mode except "plot-oldcompiler": a canned
+// 1x1 PNG frame echoing the request's plotId (as meta.id, per the protocol)
+// and its width/height (as meta.width/meta.height — the real compiler has no
+// reason to echo those; it is fixture instrumentation so a test can prove the
+// requested size reached the wire).
 //
 // Fixture selection for check/checkCells: the submitted text is scanned for
 // the literal marker "FAKE_ERROR" — present picks fixtures/check-error.json
@@ -36,6 +57,34 @@ const ERROR_MARKER = "FAKE_ERROR";
 
 const checkClean = require("./fixtures/check-clean.json");
 const checkError = require("./fixtures/check-error.json");
+
+/** A real (1x1, transparent) PNG — small enough to inline everywhere. */
+const TINY_PNG_B64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
+/** The figure spec an eval emits in the plot modes: the shape `renderPlot`
+ *  takes as `spec`, with a title so the companion text line has something to
+ *  name. */
+const PLOTLY_FRAME = {
+  v: 1,
+  mime: "application/vnd.plotly.v1+json",
+  encoding: "json",
+  data: {
+    data: [{ type: "scatter", mode: "lines", x: [0, 1, 2], y: [0, 1, 4] }],
+    layout: { title: { text: "fake figure" } },
+  },
+  meta: { id: "plot-1", backend: "plotly" },
+};
+
+const PROGRAM_PNG_FRAME = {
+  v: 1,
+  mime: "image/png",
+  encoding: "base64",
+  data: TINY_PNG_B64,
+  meta: { id: "raster-1", backend: "gr" },
+};
+
+const PLOT_MODES = new Set(["plot", "plot-renderfail", "plot-huge", "plot-oldcompiler"]);
 
 function write(obj) {
   process.stdout.write(`${JSON.stringify(obj)}\n`);
@@ -92,6 +141,16 @@ function respondEval(req) {
         diagnostics: [],
       };
 
+  if (PLOT_MODES.has(FAKE_MODE)) {
+    write(Object.assign({}, base, { display: [PLOTLY_FRAME] }));
+    return;
+  }
+
+  if (FAKE_MODE === "plot-raster") {
+    write(Object.assign({}, base, { display: [PROGRAM_PNG_FRAME] }));
+    return;
+  }
+
   if (FAKE_MODE === "display") {
     // Same "id" as the in-flight request on purpose: this is exactly the
     // shape a client must NOT let settle the pending request (see
@@ -112,6 +171,26 @@ function respondEval(req) {
 
 function respondResetSession(req) {
   write({ id: req.id, ok: true });
+}
+
+/** `{id, frame}` — one complete display frame, the same shape an eval's
+ *  frames have, per the protocol's RenderPlotResponse. */
+function respondRenderPlot(req) {
+  if (FAKE_MODE === "plot-renderfail") {
+    write({ id: req.id, error: "fake-serve: GR worker unavailable (GRDIR not set?)" });
+    return;
+  }
+  const data = FAKE_MODE === "plot-huge" ? "A".repeat(2 * 1024 * 1024) : TINY_PNG_B64;
+  write({
+    id: req.id,
+    frame: {
+      v: 1,
+      mime: "image/png",
+      encoding: "base64",
+      data,
+      meta: { id: req.plotId, backend: "gr", width: req.width, height: req.height },
+    },
+  });
 }
 
 function handleLine(line) {
@@ -140,6 +219,15 @@ function handleLine(line) {
       return;
     case "resetSession":
       respondResetSession(req);
+      return;
+    case "renderPlot":
+      // "plot-oldcompiler" answers exactly what a compiler predating this verb
+      // does — the same line the default branch below writes.
+      if (FAKE_MODE === "plot-oldcompiler") {
+        write({ id: req.id, error: `unknown cmd '${req.cmd}'` });
+        return;
+      }
+      respondRenderPlot(req);
       return;
     case "shutdown":
       // No response, by contract. Exit so nothing lingers after the test

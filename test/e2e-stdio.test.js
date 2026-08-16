@@ -14,6 +14,8 @@ const assert = require("node:assert/strict");
 const { Client } = require("@modelcontextprotocol/sdk/client/index.js");
 const { StdioClientTransport } = require("@modelcontextprotocol/sdk/client/stdio.js");
 
+const { makeFakeGrRoot, NO_SUCH_GR } = require("./helpers");
+
 const SERVER_ENTRY = path.join(__dirname, "..", "src", "index.js");
 const FAKE_SERVE = path.join(__dirname, "fake-serve.js");
 
@@ -117,6 +119,117 @@ test(
     }
   }
 );
+
+// --- the plot upgrade, full stack -----------------------------------------------
+//
+// BLADE_GR_PATH is pinned in BOTH directions here rather than left to
+// discovery: the fallback candidates include a sibling Blade-REPL checkout,
+// and whether the developer running the suite happens to have one must not
+// decide which branch these tests take.
+
+test("blade_eval: a plotly frame comes back as a REAL image block when GR is available", async () => {
+  const gr = makeFakeGrRoot();
+  const { client } = await connect({ FAKE_MODE: "plot", BLADE_GR_PATH: gr.root });
+  try {
+    const result = await client.callTool({ name: "blade_eval", arguments: { source: "plot.line(x, y)", plotWidth: 1200, plotHeight: 900 } });
+    const s = result.structuredContent;
+    assert.equal(s.ok, true);
+    assert.equal(s.displayFrames, 1);
+    assert.equal(s.plotsRendered, 1);
+    assert.equal(s.plotRenderNote, undefined);
+
+    const image = result.content.find((c) => c.type === "image");
+    assert.ok(image, "the plotly figure must arrive as an image block, not as JSON text");
+    assert.equal(image.mimeType, "image/png");
+    assert.ok(Buffer.from(image.data, "base64").length > 0);
+
+    const label = result.content.find((c) => c.type === "text" && /^\[plot:/.test(c.text));
+    assert.ok(label, "a short label naming the figure must accompany the image");
+    assert.match(label.text, /fake figure/);
+    assert.match(label.text, /1200x900/, "plotWidth/plotHeight must reach the compiler");
+    assert.ok(!result.content.some((c) => c.type === "text" && /vnd\.plotly/.test(c.text)));
+  } finally {
+    await client.close();
+    gr.dispose();
+  }
+});
+
+test("blade_eval: without GR the same frame degrades to JSON text and says why — the eval still succeeds", async () => {
+  const { client } = await connect({ FAKE_MODE: "plot", BLADE_GR_PATH: NO_SUCH_GR });
+  try {
+    const result = await client.callTool({ name: "blade_eval", arguments: { source: "plot.line(x, y)" } });
+    const s = result.structuredContent;
+    assert.equal(result.isError, undefined);
+    assert.equal(s.ok, true);
+    assert.equal(s.displayFrames, 1);
+    assert.equal(s.plotsRendered, undefined);
+    assert.match(s.plotRenderNote, /GR is unavailable/);
+    assert.ok(!result.content.some((c) => c.type === "image"));
+    assert.ok(result.content.some((c) => c.type === "text" && /vnd\.plotly/.test(c.text)));
+  } finally {
+    await client.close();
+  }
+});
+
+test("blade_eval: a live render failure falls back to text and never fails the eval", async () => {
+  const gr = makeFakeGrRoot();
+  const { client } = await connect({ FAKE_MODE: "plot-renderfail", BLADE_GR_PATH: gr.root });
+  try {
+    const result = await client.callTool({ name: "blade_eval", arguments: { source: "plot.line(x, y)" } });
+    const s = result.structuredContent;
+    assert.equal(result.isError, undefined);
+    assert.equal(s.ok, true);
+    assert.match(s.plotRenderNote, /GR render failed/);
+    assert.ok(!result.content.some((c) => c.type === "image"));
+  } finally {
+    await client.close();
+    gr.dispose();
+  }
+});
+
+test("blade_eval: a compiler predating renderPlot falls back to text, not to an error result", async () => {
+  const gr = makeFakeGrRoot();
+  const { client } = await connect({ FAKE_MODE: "plot-oldcompiler", BLADE_GR_PATH: gr.root });
+  try {
+    const result = await client.callTool({ name: "blade_eval", arguments: { source: "plot.line(x, y)" } });
+    assert.equal(result.isError, undefined);
+    assert.equal(result.structuredContent.ok, true);
+    assert.match(result.structuredContent.plotRenderNote, /predate 'renderPlot'/);
+  } finally {
+    await client.close();
+    gr.dispose();
+  }
+});
+
+test("blade_eval: a render past the 1 MB inline cap becomes the size placeholder, not a wall of base64", async () => {
+  const gr = makeFakeGrRoot();
+  const { client } = await connect({ FAKE_MODE: "plot-huge", BLADE_GR_PATH: gr.root });
+  try {
+    const result = await client.callTool({ name: "blade_eval", arguments: { source: "plot.line(x, y)" } });
+    assert.equal(result.structuredContent.ok, true);
+    assert.ok(!result.content.some((c) => c.type === "image"));
+    assert.ok(result.content.some((c) => c.type === "text" && /exceeds the 1 MB inline limit/.test(c.text)));
+  } finally {
+    await client.close();
+    gr.dispose();
+  }
+});
+
+test("blade_eval: an image/png frame the program produced still passes through unchanged", async () => {
+  const gr = makeFakeGrRoot();
+  const { client } = await connect({ FAKE_MODE: "plot-raster", BLADE_GR_PATH: gr.root });
+  try {
+    const result = await client.callTool({ name: "blade_eval", arguments: { source: "p" } });
+    const s = result.structuredContent;
+    assert.equal(s.displayFrames, 1);
+    assert.equal(s.plotsRendered, undefined, "a raster frame is already an image — no render round trip");
+    assert.equal(result.content.length, 2, "structured JSON + the image, with no added label");
+    assert.equal(result.content[1].type, "image");
+  } finally {
+    await client.close();
+    gr.dispose();
+  }
+});
 
 test("unknown tool name is a clean isError, not a transport crash", async () => {
   const { client, transport } = await connect();
