@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "diagnostics": [],
+  "bindings": [
+    { "name": "x", "kind": "value", "line": 1, "col": 5, "endLine": 1, "endCol": 6, "type": "Int64" },
+    { "name": "y", "kind": "value", "line": 2, "col": 5, "endLine": 2, "endCol": 6, "type": "Int64", "concreteType": "Int64" }
+  ],
+  "kernels": [],
+  "calls": [],
+  "references": [
+    { "name": "x", "kind": "value", "def": { "line": 1, "col": 5, "endLine": 1, "endCol": 6 }, "uses": [{ "line": 2, "col": 9, "endLine": 2, "endCol": 10 }] },
+    { "name": "y", "kind": "value", "def": { "line": 2, "col": 5, "endLine": 2, "endCol": 6 }, "uses": [] }
+  ],
+  "providers": [],
+  "deduced": []
+}

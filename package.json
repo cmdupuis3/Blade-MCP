@@ -12,12 +12,12 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node --test test/",
-    "test:integration": "node --test test/integration/",
+    "test": "node --test \"test/unit/*.test.js\" \"test/*.test.js\"",
+    "test:integration": "node --test \"test/integration/*.test.js\"",
     "vendor:protocol": "npm pack ../Blade/protocol --pack-destination vendor"
   },
   "dependencies": {
-    "@blade-lang/ide-protocol": "file:stub/ide-protocol",
+    "@blade-lang/ide-protocol": "file:vendor/blade-lang-ide-protocol-0.19.2.tgz",
     "@modelcontextprotocol/sdk": "^1.0.0"
   }
 }

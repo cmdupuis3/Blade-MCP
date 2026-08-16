@@ -1,0 +1,142 @@
+[
+  {
+    "intent": "elementwise operation over arrays sharing an index space",
+    "keywords": ["elementwise", "zip", "co-iterate", "pointwise", "map over two arrays", "same shape", "add arrays"],
+    "corpus": ["tests/corpus/bracketed/011_elementwise_mask_and.blade", "tests/corpus/bracketed/012_elementwise_compare.blade", "tests/corpus/diagnostics/058_one_param_kernel_over_zip.blade"],
+    "examples": [],
+    "note": "Write `A + B`, or `method_for(zip(A, B)) <@> f` for a custom kernel. `method_for(zip(A, B))` co-iterates; `method_for(A, B)` is the OUTER PRODUCT — confusing them silently changes the output rank."
+  },
+  {
+    "intent": "all-pairs / outer product / broadcast between two arrays",
+    "keywords": ["outer product", "all pairs", "cross product", "broadcast", "[+]", "[*]", "cartesian", "pairwise"],
+    "corpus": ["tests/corpus/bracketed/001_bracketed_arithmetic.blade", "tests/corpus/bracketed/004_bracketed_mixed.blade", "tests/corpus/bracketed/013_broadcast_compare.blade"],
+    "examples": [],
+    "note": "Bracketed operators `A [+] B` / `A [*] B` build the rank-(r+s) outer result; `method_for(A, B) <@> f` does the same with your own kernel. Never nest loops for this."
+  },
+  {
+    "intent": "reduce / fold an array to a scalar, or peel one axis",
+    "keywords": ["reduce", "fold", "sum", "total", "aggregate", "accumulate", "axes", "partial reduction", "row sums"],
+    "corpus": ["tests/corpus/bracketed/014_bracketed_compute.blade", "tests/corpus/diagnostics/066_reduce_axes_zero.blade", "tests/corpus/sql-reduce/001_reduce_sum_section.blade"],
+    "examples": ["examples/01_weather_stations.blade"],
+    "note": "Rank 1: `reduce(A, (+))`. Rank k to a scalar: `reduce(A, (+), axes = k)`. A BARE `reduce` on rank >= 2 defaults to axes = 1 — it peels the innermost axis and returns an array, not a scalar. reduce folds right-to-left, which matters the moment your kernel is not commutative."
+  },
+  {
+    "intent": "several statistics in one pass over the data",
+    "keywords": ["one pass", "single traversal", "multiple accumulators", "mean and variance", "fusion", "<&!>", "count and sum"],
+    "corpus": ["tests/corpus/loops/019_fusion_basic.blade", "tests/corpus/loops/021_fusion_3_way.blade"],
+    "examples": ["examples/03_signal_conditioning.blade", "examples/05_streaming_telemetry.blade"],
+    "note": "Fuse the kernels into one loop object and destructure the result: `let (s, ss, n) = reduce((L <@> k_id) <&!> (L <@> square) <&!> (L <@> k_one), (+))`. One traversal, three accumulators, no mutation."
+  },
+  {
+    "intent": "filter rows / WHERE clause / select a subset",
+    "keywords": ["filter", "where", "select", "subset", "predicate", "mask", "compound", "quality control", "drop bad rows"],
+    "corpus": ["tests/corpus/sql-masks/001_mask_basic.blade", "tests/corpus/sql-masks/004_mask_with_compute.blade", "tests/corpus/fallback/002_compound_present_zero.blade"],
+    "examples": ["examples/01_weather_stations.blade"],
+    "note": "`mask(xs, pred)` builds the predicate, `compound(data, mask)` applies it; compose masks with `&&` / `||`. There is no filter loop."
+  },
+  {
+    "intent": "stencil, sliding window, lags, finite differences",
+    "keywords": ["stencil", "window", "rolling", "neighbors", "halo", "finite difference", "lag", "moving average", "central difference"],
+    "corpus": ["tests/corpus/loops/072_halo_central_difference.blade", "tests/corpus/loops/073_halo_forward_backward.blade", "tests/corpus/loops/074_halo_symmetric_sum.blade"],
+    "examples": ["examples/08_burgers_les.blade"],
+    "note": "`method_for(halo<I, [-1, 0, 1]>) <@> lambda(w) -> A(w(1)) - A(w(-1))`. The halo carries the offsets, so there is no index arithmetic and no edge guards to get wrong. Only `w(o)` offsets declared in the halo are in scope."
+  },
+  {
+    "intent": "generate an index range instead of materializing iota",
+    "keywords": ["range", "iota", "indices", "counter", "sequence of integers", "enumerate", "virtual array"],
+    "corpus": ["tests/corpus/anon-ranges/001_anon_range_zero_based.blade", "tests/corpus/anon-ranges/002_anon_range_offset.blade"],
+    "examples": [],
+    "note": "`range<Idx<8>>` is a virtual array — it costs nothing to iterate and its extents fold at compile time. Map over it with `method_for(range<...>) <@> lambda(i) -> ...`."
+  },
+  {
+    "intent": "pipeline of stages, composing transformations lazily",
+    "keywords": ["pipeline", "compose", "chain", "stages", "object_for", ">>@", "compute", "lazy", "deferred"],
+    "corpus": ["tests/corpus/loops/043_compose_obj_basic.blade", "tests/corpus/loops/045_duality_theorem.blade", "tests/corpus/deferred-concrete/001_functor_map_over_array.blade"],
+    "examples": ["examples/03_signal_conditioning.blade"],
+    "note": "Compose values, not calls: `let stage = object_for(f) >>@ object_for(g)`, apply with `<@>`, materialize with `|> compute`. Nothing runs until compute, so no per-stage temporaries."
+  },
+  {
+    "intent": "running state, recurrence, time stepping, dynamic programming",
+    "keywords": ["recurrence", "running", "cumulative", "time step", "iterate", "state", "let rec", "accumulator", "rk4", "dynamic programming", "prefix"],
+    "corpus": ["tests/corpus/recursive-arrays/002_running_reduce.blade", "tests/corpus/recursive-arrays/007_rk4_litmus.blade", "tests/corpus/recursive-arrays/008_nested_dp.blade", "tests/corpus/recursive-arrays/009_zero_history.blade"],
+    "examples": ["examples/05_streaming_telemetry.blade"],
+    "note": "`let rec x: Array<Float like Step> = match x with | zero -> zero | prefix :: n -> prefix :: f(prefix(n - 1))`. This is the replacement for `let mut` + a loop: one pre-allocated buffer, no recursion frames. Reads past the built prefix are implicitly zero, so lag schemes need NO bounds guards."
+  },
+  {
+    "intent": "symmetric pairwise statistics: covariance, comoments, gram matrices",
+    "keywords": ["covariance", "symmetric", "pairwise", "comm", "gram", "reynolds", "triangular", "correlation matrix", "self outer product"],
+    "corpus": ["tests/corpus/symmetry/001_triangular_iteration.blade", "tests/corpus/symmetry/003_output_type_same_array_comm.blade", "tests/corpus/functions/012_hm_polymorphic_kernel_through_reynolds.blade", "tests/corpus/functions/038_gram_transpose_unannotated_rank2.blade"],
+    "examples": ["examples/02_portfolio_moments.blade"],
+    "note": "Declare `where comm(a, b)` and let the compiler derive triangular storage and iteration (r! savings). `reynolds(g)` MANUFACTURES a commutative kernel by symmetrization when you cannot annotate one. Symmetric output storage is licensed only when the SAME array occupies the commuting positions."
+  },
+  {
+    "intent": "one function that works at several ranks (arity polymorphism)",
+    "keywords": ["rank polymorphic", "arity", "generic over rank", "T^k", "any rank", "pack", "former", "multiple arguments"],
+    "corpus": ["tests/corpus/arity/001_poly_type.blade", "tests/corpus/arity/015_pack_former.blade", "tests/corpus/arity/022_comoment_covariance_matrix.blade"],
+    "examples": ["examples/02_portfolio_moments.blade"],
+    "note": "A function typechecks and compiles differently depending on how many array arguments it receives; output rank and symmetry are deduced per call shape. Abstract types are `T^r`; arrays have concrete `Array<T like I, J>` types."
+  },
+  {
+    "intent": "named index types, bounds safety, transposes and reshapes",
+    "keywords": ["index type", "Idx", "SymIdx", "AntisymIdx", "CompoundIdx", "SparseIdx", "OrbIdx", "dimension", "axis identity", "transpose", "bounds"],
+    "corpus": ["tests/corpus/index-types/001_compound_construct_index.blade", "tests/corpus/index-types/029_transpose_rank3.blade"],
+    "examples": ["examples/09_qg_atmosphere.blade"],
+    "note": "Index types are the type system's spine: `Nat<LatIdx>` and `Nat<LonIdx>` do not unify even at equal extent, which is what makes `A(i)` bounds-safe by construction. `()` is application/indexing (curried); `[]` is ONLY tuple/pack access."
+  },
+  {
+    "intent": "units of measure and dimensional safety",
+    "keywords": ["units", "dimensional analysis", "meters", "seconds", "physical quantity", "unit clash", "SI"],
+    "corpus": ["tests/corpus/units/001_unit_base_declaration.blade", "tests/corpus/units/002_unit_derived.blade", "tests/corpus/units/004_unit_arithmetic.blade"],
+    "examples": ["examples/04_trajectory_sensitivity.blade"],
+    "note": "`Unit meters` / `Unit mps = meters / seconds`, then `type Speed = Float<mps>`. A unit clash is a refusal, not a warning — fix the declaration rather than casting around it."
+  },
+  {
+    "intent": "group by a key and aggregate per group",
+    "keywords": ["group by", "aggregate per key", "bucket", "per category", "histogram", "segment", "enum key"],
+    "corpus": ["tests/corpus/sql-group-by/001_groupby_idx_first.blade", "tests/corpus/sql-group-by/002_groupby_idx_sum_two.blade", "tests/corpus/sql-group-by/004_groupby_enum_first.blade"],
+    "examples": ["examples/01_weather_stations.blade"],
+    "note": "Group-by is a relational operator over an Idx or EnumIdx key; the group axis becomes part of the result's type."
+  },
+  {
+    "intent": "build a new leading axis by stacking or joining arrays",
+    "keywords": ["stack", "concatenate", "append arrays", "join", "new axis", "combine arrays", "vstack"],
+    "corpus": ["tests/corpus/stack-join/001_stack_rank1.blade", "tests/corpus/stack-join/002_stack_rank2_fields.blade", "tests/corpus/stack-join/004_join_leading_axis.blade"],
+    "examples": [],
+    "note": "`stack` creates a fresh leading axis; `join` extends one. Off-axis extent disagreement is refused (BL3016) rather than silently truncated."
+  },
+  {
+    "intent": "return several values at once / tuples and packs",
+    "keywords": ["tuple", "multiple return", "pair", "destructure", "pack", "several outputs"],
+    "corpus": ["tests/corpus/tuples/001_bare_comma_construction.blade", "tests/corpus/tuples/003_tuple_width_ascription.blade", "tests/corpus/tuple-views/001_tuple_view_flat_3_way.blade"],
+    "examples": ["examples/03_signal_conditioning.blade"],
+    "note": "`let (a, b, c) = ...` destructures; `t[0]` indexes a TUPLE (square brackets are never array indexing)."
+  },
+  {
+    "intent": "compile-time constants and compile-time evaluation",
+    "keywords": ["static", "compile time", "constant", "const", "literal extent", "meta"],
+    "corpus": ["tests/corpus/static/001_static_value.blade", "tests/corpus/static/003_static_function.blade", "tests/corpus/static/004_static_dependency_order.blade"],
+    "examples": [],
+    "note": "`let static n = 4` is immutable everywhere and usable as an extent; `static function`s run at compile time and MAY mutually recurse (runtime functions may not — BL2001)."
+  },
+  {
+    "intent": "I want a for loop / while loop / imperative iteration",
+    "keywords": ["for loop", "while loop", "iterate imperatively", "mutate accumulator", "BL1003", "loop counter", "index arithmetic"],
+    "corpus": ["tests/corpus/diagnostics/045_for_in_removed.blade", "tests/corpus/recursive-arrays/002_running_reduce.blade", "tests/corpus/loops/019_fusion_basic.blade"],
+    "examples": [],
+    "note": "The imperative loop was REMOVED from the language and is diagnosed (BL1003) — do not reintroduce it through workarounds. Parallel structure is a loop object (`method_for`/`object_for`); sequential structure is a recursive array (`let rec`). There is nothing else, by design."
+  },
+  {
+    "intent": "probabilistic moments, comoments, distributions",
+    "keywords": ["moments", "comoment", "cumulant", "distribution", "probability", "ppl", "expectation", "variance"],
+    "corpus": ["tests/corpus/ppl/001_moments_pair.blade", "tests/corpus/ppl/003_moments_mean.blade", "tests/corpus/ppl/004_comoments_pair.blade"],
+    "examples": ["examples/02_portfolio_moments.blade"],
+    "note": "The ppl surface provides moment/comoment formers; order-2 formers route to `gram(A, A)` so they inherit BLAS."
+  },
+  {
+    "intent": "plot or emit a rich display frame",
+    "keywords": ["plot", "chart", "figure", "display", "visualize", "image", "graph"],
+    "corpus": ["tests/corpus/display/001_emit_frames.blade"],
+    "examples": [],
+    "note": "`import plot` from the stdlib; display frames ride the eval response and appear as image content in blade_eval."
+  }
+]

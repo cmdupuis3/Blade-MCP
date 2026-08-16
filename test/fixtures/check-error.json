@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "diagnostics": [
+    {
+      "severity": "error",
+      "line": 3,
+      "col": 9,
+      "endLine": 3,
+      "endCol": 10,
+      "message": "argument extent mismatch: 'w' declared Idx<4>, argument 'a' has extent Idx<2>",
+      "code": "BL3016"
+    },
+    {
+      "severity": "warning",
+      "line": 1,
+      "col": 1,
+      "endLine": 1,
+      "endCol": 1,
+      "message": "unattributed warning with no registry code, for the code:null trimming path"
+    }
+  ],
+  "bindings": [
+    { "name": "f", "kind": "function", "line": 1, "col": 10, "endLine": 1, "endCol": 11, "type": "(Array<Float64 like Idx<4>>) -> Float64" },
+    { "name": "a", "kind": "value", "line": 2, "col": 5, "endLine": 2, "endCol": 6, "type": "Array<Float64 like Idx<2>>" },
+    { "name": "r", "kind": "value", "line": 3, "col": 5, "endLine": 3, "endCol": 6, "type": "Float64" }
+  ],
+  "kernels": [],
+  "calls": [],
+  "references": [
+    { "name": "f", "kind": "function", "def": { "line": 1, "col": 10, "endLine": 1, "endCol": 11 }, "uses": [{ "line": 3, "col": 9, "endLine": 3, "endCol": 10 }] },
+    { "name": "a", "kind": "value", "def": { "line": 2, "col": 5, "endLine": 2, "endCol": 6 }, "uses": [{ "line": 3, "col": 11, "endLine": 3, "endCol": 12 }] },
+    { "name": "r", "kind": "value", "def": { "line": 3, "col": 5, "endLine": 3, "endCol": 6 }, "uses": [] },
+    { "name": "Idx", "kind": "type", "def": null, "uses": [{ "line": 1, "col": 30, "endLine": 1, "endCol": 33 }, { "line": 2, "col": 20, "endLine": 2, "endCol": 23 }] }
+  ],
+  "providers": [],
+  "deduced": []
+}

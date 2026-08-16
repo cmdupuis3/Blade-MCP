@@ -1,0 +1,13 @@
+// TEST: Running Reduce
+// A running-state recurrence, mirroring
+// tests/corpus/recursive-arrays/002_running_reduce.blade — gives
+// blade_corpus_find's intent search ("running state / recurrence") and
+// content search ("recurrence") a real hit in the mini corpus.
+// EXPECT: total = 4.5
+type Step = Idx<6>
+let rec x: Array<Float64 like Step> =
+    match x with
+    | zero -> zero
+    | zero :: s -> zero :: 1.0
+    | prefix :: n -> prefix :: prefix(n - 1) * 0.5 + 1.0
+let total = reduce(x, (+))
