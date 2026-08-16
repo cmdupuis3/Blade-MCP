@@ -19,6 +19,8 @@ const { execFile } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
+const gr = require("./gr");
+
 /** Synthetic path used when a caller supplies bare `source`. Never written to disk. */
 const SNIPPET_BASENAME = "__blade_mcp_snippet__.blade";
 
@@ -164,8 +166,24 @@ function createContext(options) {
   let diagRegistryCache;
   let repoRootCache;
   let corpusRootCache;
+  let grCache;
 
   const testServe = splitTestServe(env[TEST_SERVE_ENV]);
+
+  /** The GR runtime this server can offer the compiler, resolved once.
+   *  `{ok:true, grdir, source}` or `{ok:false, reason}` — never throws, and
+   *  "not found" is a normal, non-fatal answer (plots degrade to text). */
+  function grRuntime() {
+    if (grCache === undefined) {
+      try {
+        grCache = gr.resolveGr({ env, repoRoot: path.join(__dirname, "..") });
+      } catch (e) {
+        grCache = { ok: false, reason: `GR resolution failed: ${e.message}` };
+      }
+      log(grCache.ok ? `GR runtime: ${grCache.grdir} (from ${grCache.source})` : `GR runtime unavailable: ${grCache.reason}`);
+    }
+    return grCache;
+  }
 
   /** Re-resolved on every call so a respawn picks up a newer build. */
   function resolved() {
@@ -194,6 +212,14 @@ function createContext(options) {
         findCompiler: () => resolved().exe,
         output: { appendLine: (line) => log(line) },
         cwd: config.cwd,
+        // A FUNCTION, not an object: the protocol client re-reads it at every
+        // spawn, so a respawn after a crash still gets GR wired up. Returning
+        // undefined means "inherit this process's environment" — byte-for-byte
+        // the pre-GR behavior, which is what a host without GR must keep.
+        env: () => {
+          const g = grRuntime();
+          return g.ok ? gr.grEnv(g.grdir, env) : undefined;
+        },
       };
       if (testServe) deps.args = testServe.args;
       client = pkg.createClient(deps, "blade-mcp");
@@ -324,6 +350,7 @@ function createContext(options) {
     log,
     resolved,
     getClient,
+    grRuntime,
     drainFrames,
     surface,
     kb,
@@ -403,6 +430,15 @@ async function probeServe(ctx) {
   }
 }
 
+/** GR availability as doctor data. Tolerates a context built before grRuntime
+ *  existed (unit tests hand-roll contexts), reporting "unknown" rather than
+ *  making blade_doctor — the tool that must survive everything — throw. */
+function grReport(ctx) {
+  if (!ctx || typeof ctx.grRuntime !== "function") return { available: "unknown" };
+  const g = ctx.grRuntime();
+  return g.ok ? { available: true, grdir: g.grdir, source: g.source } : { available: false, reason: g.reason };
+}
+
 /**
  * blade_doctor — NEVER returns isError. Diagnosing a broken/absent compiler is
  * precisely this tool's job, so a failure is reported as data.
@@ -424,6 +460,10 @@ async function bladeDoctor(args, ctx) {
         : compilerVersion !== surfaceCompilerVersion,
     serveAvailable: serve.available,
     protocolVersion: serve.protocolVersion,
+    // Whether blade_eval can upgrade plotly figures to real images. Reported
+    // here because "my plots come back as JSON" is a toolchain question, and
+    // this tool is where a toolchain question gets answered.
+    grRuntime: grReport(ctx),
     toolchain: doctor.ok ? doctor.json : null,
   };
   if (!doctor.ok) {

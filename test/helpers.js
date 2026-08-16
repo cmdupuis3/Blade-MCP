@@ -6,10 +6,47 @@
 // require.
 
 const { spawn } = require("child_process");
+const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const readline = require("readline");
 
+const gr = require("../src/gr");
+
 const FAKE_SERVE_PATH = path.join(__dirname, "fake-serve.js");
+
+/**
+ * A throwaway directory that PASSES src/gr.js's validation on THIS platform —
+ * every required entry, created empty. Nothing in this suite loads GR (the
+ * fake serve is a Node script), so an empty tree is exactly the right double:
+ * it proves the resolve/env plumbing without a 100 MB download.
+ *
+ * Returns { root, dispose() }. Entries whose last segment has no extension
+ * (e.g. "fonts") are created as directories, the rest as empty files.
+ */
+function makeFakeGrRoot() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "blade-mcp-gr-"));
+  for (const rel of gr.requiredFiles()) {
+    const full = path.join(root, rel);
+    if (path.extname(full) === "") {
+      fs.mkdirSync(full, { recursive: true });
+    } else {
+      fs.mkdirSync(path.dirname(full), { recursive: true });
+      fs.writeFileSync(full, "");
+    }
+  }
+  return {
+    root,
+    dispose() {
+      fs.rmSync(root, { recursive: true, force: true });
+    },
+  };
+}
+
+/** A path that certainly is not a GR installation — for pinning the
+ *  "GR unavailable" branch deterministically, whatever the host has lying
+ *  around in sibling checkouts. */
+const NO_SUCH_GR = path.join(os.tmpdir(), "blade-mcp-no-such-gr-root");
 
 /**
  * Spawn test/fake-serve.js with `extraEnv` layered over the current process
@@ -97,4 +134,4 @@ function spawnFakeServe(extraEnv) {
   return { proc, send, waitFor, waitForExit, lines, dispose };
 }
 
-module.exports = { spawnFakeServe, FAKE_SERVE_PATH };
+module.exports = { spawnFakeServe, FAKE_SERVE_PATH, makeFakeGrRoot, NO_SUCH_GR };

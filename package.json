@@ -17,7 +17,7 @@
     "vendor:protocol": "npm pack ../Blade/protocol --pack-destination vendor"
   },
   "dependencies": {
-    "@blade-lang/ide-protocol": "file:vendor/blade-lang-ide-protocol-0.19.2.tgz",
+    "@blade-lang/ide-protocol": "file:vendor/blade-lang-ide-protocol-0.20.0.tgz",
     "@modelcontextprotocol/sdk": "^1.0.0"
   }
 }

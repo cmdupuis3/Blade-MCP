@@ -101,6 +101,84 @@ test("resetSession: {ok:true}", async () => {
   }
 });
 
+test("renderPlot: answers {id, frame} with a base64 PNG, echoing plotId and the requested size", async () => {
+  const fake = spawnFakeServe();
+  try {
+    const id = fake.send({ cmd: "renderPlot", spec: { data: [], layout: {} }, plotId: "plot-7", width: 1200, height: 900 });
+    const resp = await fake.waitFor((l) => l.id === id);
+    assert.equal(resp.frame.mime, "image/png");
+    assert.equal(resp.frame.encoding, "base64");
+    assert.equal(resp.frame.meta.id, "plot-7");
+    assert.equal(resp.frame.meta.backend, "gr");
+    assert.equal(resp.frame.meta.width, 1200);
+    assert.equal(resp.frame.meta.height, 900);
+    assert.ok(Buffer.from(resp.frame.data, "base64").length > 0);
+  } finally {
+    fake.dispose();
+  }
+});
+
+test("FAKE_MODE=plot: eval carries a plotly figure frame in its display array", async () => {
+  const fake = spawnFakeServe({ FAKE_MODE: "plot" });
+  try {
+    const id = fake.send({ cmd: "eval", session: "default", source: "plot.line(x, y)" });
+    const resp = await fake.waitFor((l) => l.id === id);
+    assert.equal(resp.exitCode, 0);
+    assert.equal(resp.display.length, 1);
+    assert.equal(resp.display[0].mime, "application/vnd.plotly.v1+json");
+    assert.equal(resp.display[0].encoding, "json");
+    assert.equal(resp.display[0].data.layout.title.text, "fake figure");
+  } finally {
+    fake.dispose();
+  }
+});
+
+test("FAKE_MODE=plot-renderfail: renderPlot answers a live {id, error} (GR unreachable)", async () => {
+  const fake = spawnFakeServe({ FAKE_MODE: "plot-renderfail" });
+  try {
+    const id = fake.send({ cmd: "renderPlot", spec: {} });
+    const resp = await fake.waitFor((l) => l.id === id);
+    assert.match(resp.error, /GR worker unavailable/);
+    assert.equal(resp.frame, undefined);
+  } finally {
+    fake.dispose();
+  }
+});
+
+test("FAKE_MODE=plot-oldcompiler: renderPlot answers the unknown-cmd line a pre-GR compiler gives", async () => {
+  const fake = spawnFakeServe({ FAKE_MODE: "plot-oldcompiler" });
+  try {
+    const id = fake.send({ cmd: "renderPlot", spec: {} });
+    const resp = await fake.waitFor((l) => l.id === id);
+    assert.equal(resp.error, "unknown cmd 'renderPlot'");
+  } finally {
+    fake.dispose();
+  }
+});
+
+test("FAKE_MODE=plot-huge: renderPlot answers a frame past the 1 MB inline cap", async () => {
+  const fake = spawnFakeServe({ FAKE_MODE: "plot-huge" });
+  try {
+    const id = fake.send({ cmd: "renderPlot", spec: {} });
+    const resp = await fake.waitFor((l) => l.id === id, 10000);
+    assert.ok(resp.frame.data.length > 1024 * 1024);
+  } finally {
+    fake.dispose();
+  }
+});
+
+test("FAKE_MODE=plot-raster: eval carries an image/png frame the program itself produced", async () => {
+  const fake = spawnFakeServe({ FAKE_MODE: "plot-raster" });
+  try {
+    const id = fake.send({ cmd: "eval", session: "default", source: "p" });
+    const resp = await fake.waitFor((l) => l.id === id);
+    assert.equal(resp.display[0].mime, "image/png");
+    assert.equal(resp.display[0].encoding, "base64");
+  } finally {
+    fake.dispose();
+  }
+});
+
 test("unknown cmd -> {id, error}", async () => {
   const fake = spawnFakeServe();
   try {
