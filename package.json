@@ -9,7 +9,7 @@
     "blade-mcp": "src/index.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=24"
   },
   "scripts": {
     "test": "node --test \"test/unit/*.test.js\" \"test/*.test.js\"",

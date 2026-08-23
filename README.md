@@ -167,7 +167,7 @@ npm test                       # unit + e2e (hermetic)
 BLADE_EXE=/path/to/Blade.exe npm run test:integration
 ```
 
-Requires Node >= 18. CommonJS throughout. `@modelcontextprotocol/sdk` is the only real
+Requires Node >= 24. CommonJS throughout. `@modelcontextprotocol/sdk` is the only real
 dependency; tool input schemas are hand-authored JSON Schema (`src/schemas.js`) rather
 than zod.
 
