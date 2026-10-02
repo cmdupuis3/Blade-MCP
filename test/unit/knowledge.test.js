@@ -1,8 +1,7 @@
 "use strict";
 
-// knowledge.js: blade_explain merges the compiler's registry, the curated KB,
-// a small supplement for codes the registry omits, and a live scan of the
-// corpus. Tested against the REAL vendored @blade-lang/ide-protocol surface/KB
+// knowledge.js: blade_explain merges the compiler's registry, the curated KB
+// and a live scan of the corpus. Tested against the REAL vendored @blade-lang/ide-protocol surface/KB
 // (so registry titles are authentic) but the mini corpus (so example
 // resolution is hermetic).
 //
@@ -208,23 +207,17 @@ test("bladeExplain: no corpus root -> corpusNote instead of a crash", async () =
   assert.equal(s.examples.length, 0);
 });
 
-// --- codes the compiler emits but does not register -----------------------------
+// --- the removed-loop steer ------------------------------------------------------
 
-test("bladeExplain: BL1003 (emitted and corpus-pinned, but unregistered) is explained from the supplement", async () => {
-  // Pin the gap rather than assume it: a registry and KB without BL1003, whatever the vendored package says today.
-  const registry = new Map(pkg.surface.diagnostics.filter((d) => d.code !== "BL1003").map((d) => [d.code, d]));
-  const codes = Object.assign({}, pkg.diagnosticsKb.codes);
-  delete codes.BL1003;
-  const s = await explain({ code: "BL1003" }, makeCtx({ diagRegistry: registry, kb: { version: 1, codes } }));
+test("bladeExplain: BL1003 (the removed-loop steer) is registered, explained, and its span pin is shown both ways", async () => {
+  const s = await explain({ code: "BL1003" });
   assert.equal(s.known, true);
-  assert.equal(s.registered, false);
+  assert.equal(s.registered, true);
   assert.equal(s.phase, "parse");
-  assert.match(s.title, /imperative loop removed/);
+  assert.equal(s.title, "removed loop or malformed recursive array");
   assert.match(s.explanation, /for x in a\.\.b/);
   assert.match(s.fix, /let rec/);
-  assert.match(s.registryNote, /does not list it/);
-  // It is the compiler's registry that lacks the code — not version skew.
-  assert.doesNotMatch(s.registryNote, /newer compiler|blade_doctor/);
+  assert.equal(s.registryNote, undefined);
   assert.equal(s.kbNote, undefined);
   assert.equal(s.examples[0].path, "tests/corpus/diagnostics/045_for_in_removed.blade");
   assert.deepEqual(s.examples[0].pinned, [{ pin: "ERROR", line: 2, at: "13:5", atInFile: "14:5" }]);
@@ -233,34 +226,21 @@ test("bladeExplain: BL1003 (emitted and corpus-pinned, but unregistered) is expl
   assert.match(s.spanNote, /`atInFile` is the same span in the file as shown/);
 });
 
+test("the parser steer codes BL1003 and BL1004 are in the packaged registry and knowledge base", () => {
+  // They were emitted and corpus-pinned for months while the compiler's registry
+  // omitted them; a re-vendor from a compiler that lost them again should fail here.
+  const registered = new Map(pkg.surface.diagnostics.map((d) => [d.code, d]));
+  for (const code of ["BL1003", "BL1004"]) {
+    assert.equal(registered.get(code) && registered.get(code).phase, "parse", code);
+    const kbEntry = pkg.diagnosticsKb.codes[code];
+    assert.ok(kbEntry && kbEntry.explanation && kbEntry.fix, `${code} has curated prose`);
+    assert.equal(kbEntry.title, registered.get(code).title, code);
+  }
+});
+
 test("bladeExplain: examples without a span pin carry no span caveat", async () => {
   const s = await explain({ code: "BL3016", includeSource: false });
   assert.equal(s.spanNote, undefined);
-});
-
-test("bladeExplain: the supplement never overrides the registry or the KB", async () => {
-  const registry = new Map([["BL1003", { code: "BL1003", title: "registry title", phase: "parse" }]]);
-  const fromRegistry = await explain({ code: "BL1003" }, makeCtx({ diagRegistry: registry }));
-  assert.equal(fromRegistry.title, "registry title");
-  assert.equal(fromRegistry.registered, true);
-  assert.equal(fromRegistry.explanation, undefined); // registry only: no supplement prose leaks in
-  assert.equal(fromRegistry.registryNote, undefined);
-
-  const kb = { version: 1, codes: { BL1003: { title: "kb title", explanation: "kb explanation", fix: "kb fix", examples: [], docs: [] } } };
-  const fromKb = await explain({ code: "BL1003" }, makeCtx({ kb }));
-  assert.equal(fromKb.title, "kb title");
-  assert.equal(fromKb.explanation, "kb explanation");
-});
-
-test("the supplement is well-formed and only names codes the registry lacks", () => {
-  const registered = new Set(pkg.surface.diagnostics.map((d) => d.code));
-  for (const [code, entry] of Object.entries(knowledge.UNREGISTERED)) {
-    assert.match(code, /^BL\d{4}$/);
-    for (const field of ["title", "phase", "explanation", "fix"]) assert.ok(typeof entry[field] === "string" && entry[field].length > 0, `${code}.${field}`);
-    // When upstream registers the code this entry is dead weight: delete it.
-    assert.equal(registered.has(code), false, `${code} is now in the compiler's registry — remove it from knowledge.UNREGISTERED`);
-    for (const doc of entry.docs) assert.ok(resources.uriForRel(doc), `${code}: ${doc} is not served by a blade-docs resource`);
-  }
 });
 
 test("bladeExplain: an unknown/unregistered code degrades gracefully instead of erroring", async () => {

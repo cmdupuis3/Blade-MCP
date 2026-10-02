@@ -119,8 +119,9 @@ files that **pin** this code — `// ERROR: BLxxxx [@ l:c]`, `// WARN: BLxxxx`, 
 pinned span (`at`) counts lines without the file's `// TEST:` line, so each also carries
 `atInFile`. `docs[].uri` appears only when a `blade-docs://` resource serves that file.
 
-Each source degrades independently. BL1003 and BL1004, which the compiler emits but does
-not register, are explained from a supplement in `src/knowledge.js` (`registered: false`).
+Each source degrades independently: a code this server's surface does not register still
+returns its corpus examples, with `registered: false` and a note saying whether the
+corpus pins it (the compiler emits it) or it is simply unknown.
 
 ### `blade_corpus_find`
 

@@ -138,8 +138,8 @@ async function runCheck(args, ctx, defaultTier) {
  * blade_eval, so an agent reads ONE diagnostic shape whichever tool produced it.
  *
  * `code` is ABSENT from the payload when empty; it trims to null. A code the
- * registry does not know (the parser's BL1003/BL1004 are emitted but not
- * registered) simply carries no title. `severity` is passed through verbatim:
+ * registry does not know (a binary newer than the packaged surface) simply
+ * carries no title. `severity` is passed through verbatim:
  * "error" | "warning" from a check, plus "note" from an eval.
  */
 function trimDiagnostic(d, registry) {

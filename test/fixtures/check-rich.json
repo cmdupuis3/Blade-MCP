@@ -4,7 +4,7 @@
     {"severity":"warning","line":20,"col":13,"endLine":20,"endCol":14,"message":"implicit numeric conversion: this Int64 operand is converted to Float64 by mixed-type promotion; write Float64(...) around it to make the conversion explicit (or convert the other operand instead)","code":"BL3020"}
   ],
   "bindings": [
-    {"name":"store","kind":"let","line":3,"col":1,"type":"store","concreteType":"Void","endLine":3,"endCol":30},
+    {"name":"store","kind":"let","line":3,"col":1,"type":"store","endLine":3,"endCol":30},
     {"name":"obs","kind":"let","line":4,"col":1,"type":"Array<Int64 like Idx<2>, Idx<2>>","providerRead":{"store":"store","member":"vars.data"},"endLine":4,"endCol":36},
     {"name":"saved","kind":"let","line":5,"col":1,"type":"Void","providerWrite":{"store":"store","member":"vars.data"},"endLine":5,"endCol":40},
     {"name":"dot","kind":"function","line":8,"col":1,"type":"(\n    a: Array<T like Idx<_>>,\n    b: Array<T like Idx<_>>\n) -> T","doc":"Sum of products of two rows.","params":[{"name":"a","type":"Array<T like Idx<_>>"},{"name":"b","type":"Array<T like Idx<_>>"}],"ret":"T","where":["comm(a, b)"],"deducedComm":["comm(a, b)"],"endLine":8,"endCol":67},

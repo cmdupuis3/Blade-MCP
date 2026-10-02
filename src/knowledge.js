@@ -7,10 +7,7 @@
 //      phase — generated from src/Diagnostics.fs by `blade ide surface`),
 //   2. the hand-authored knowledge base (data/diagnostics.json: title,
 //      explanation, fix, curated example paths, docs),
-//   3. a small local supplement for codes the compiler EMITS but its registry
-//      does not list (see UNREGISTERED below) — consulted only when 1 and 2
-//      both miss, so an upstream fix supersedes it automatically,
-//   4. a live scan of the test corpus for files that PIN this code
+//   3. a live scan of the test corpus for files that PIN this code
 //      (`// ERROR: BLxxxx`, `// WARN: BLxxxx`, or an `// ABORT:` naming it) —
 //      ground-truth examples of the exact diagnosis, which exist whether or
 //      not anyone wrote KB prose.
@@ -27,33 +24,6 @@ const corpus = require("./corpus");
 const resources = require("./resources");
 
 const MAX_SOURCE_CHARS = 6144;
-
-/**
- * Codes the compiler raises that `src/Diagnostics.fs` (and therefore
- * surface.json and the KB) does not register. Verified against the emitting
- * sites in the compiler source (Parser.fs / ParserGrammar.fs / ParserTypes.fs)
- * and against the corpus files that pin them. This table is a stop-gap for an
- * upstream registry gap, NOT a second knowledge base: an entry is used only
- * when neither the registry nor the KB knows the code.
- */
-const UNREGISTERED = {
-  BL1003: {
-    title: "imperative loop removed / malformed recursive-array form",
-    phase: "parse",
-    explanation:
-      "A steering diagnostic for iteration syntax the language does not have. It fires for the REMOVED imperative `for x in a..b { ... }` statement (at top level and inside blocks), for an imperative `while cond { ... }` / `do { ... }` (neither is a keyword), for a guard on the wrong kind of arm (`while` on an ordinary match arm, whose guard is `if`; `if` on a recursive-array arm, which takes `while`; `while` on a `let rec` seed arm), and for a `let rec` array whose definition is not the required shape (a type annotation, `match <itself> with`, a `| zero -> zero` base arm, at most one `zero :: n` seed arm, and a `prefix :: n -> prefix :: <slice>` inductive arm). It is a hard parse error: no other production could still succeed once the construct has been recognized.",
-    fix: "Do not look for a loop workaround — iteration is declarative. A fold is `reduce(...)`; a parallel map is array arithmetic or `method_for(range<...>) <@> lambda(...)`; a recurrence / running state is a recursive array (`let rec q: Array<T like Step> = match q with | zero -> zero | prefix :: n -> prefix :: <slice>`); iterate-until-converged is that array's inductive arm with a `while` guard over a budget extent (`| prefix :: n while <cond> -> prefix :: <step>`). Use `if` to guard an ordinary match arm.",
-    docs: ["CLAUDE.md", "docs/formalism.md"],
-  },
-  BL1004: {
-    title: "malformed type spelling",
-    phase: "parse",
-    explanation:
-      "A type was spelled in a form the grammar recognizes but cannot give a meaning. Two families raise it. `Tuple<...>`: a width that is not an integer literal >= 2 (`Tuple<1>`, `Tuple<0>`, a negative width), an empty `Tuple<>`, a single component type (`Tuple<T>` — there is no 1-tuple; `(e)` is grouping), or a mix of the width spelling and the component-type spelling. Caret array types: a concrete element type with a non-literal rank (`Float64^r` — a variable rank belongs to a type variable, `T^r`), a caret on a built-in that is not an array element type, or a caret on a declared type that is itself an array type.",
-    fix: "For tuples write either an integer width >= 2 (`Tuple<2>`, element types inferred) or at least two component types (`Tuple<Float64, Float64>`), never a mixture. For caret types give a concrete element a literal rank (`Float64^1`, `Int64^2`) or use a type variable when the rank or element is generic (`T^1`, `T^r`).",
-    docs: ["docs/formalism.md", "docs/features.md"],
-  },
-};
 
 function readSource(abs) {
   try {
@@ -114,13 +84,12 @@ async function bladeExplain(args, ctx) {
   const entry = registry.get(code);
   const kb = ctx.kb();
   const kbEntry = kb && kb.codes ? kb.codes[code] : undefined;
-  const supplement = !entry && !kbEntry ? UNREGISTERED[code] : undefined;
-  const prose = kbEntry || supplement;
+  const prose = kbEntry;
 
   const structured = {
     ok: true,
     code,
-    known: !!(entry || kbEntry || supplement),
+    known: !!(entry || kbEntry),
     registered: !!entry,
   };
   if (entry) {
@@ -187,8 +156,6 @@ async function bladeExplain(args, ctx) {
     if (empty) {
       structured.registryNote =
         "this server's language surface carries no diagnostics registry (surface.json unavailable or stubbed), so titles and phases are missing — the corpus examples below are still authoritative";
-    } else if (supplement) {
-      structured.registryNote = `${code} is emitted by the compiler and pinned by its corpus, but the compiler's registry (src/Diagnostics.fs, hence surface.json) does not list it; the title, explanation and fix here come from this server's supplement, written against the emitting sites in the compiler source`;
     } else if (structured.corpusMatches) {
       structured.registryNote = `${code} is not registered in this surface, yet ${structured.corpusMatches} corpus file(s) pin it — the compiler emits it; either its registry omits it or it comes from a newer compiler than the surface.json this server was built against (run blade_doctor to check for skew)`;
     } else {
@@ -201,4 +168,4 @@ async function bladeExplain(args, ctx) {
   return compiler.toolResult(structured);
 }
 
-module.exports = { bladeExplain, docUriFor, resolveDocs, UNREGISTERED };
+module.exports = { bladeExplain, docUriFor, resolveDocs };

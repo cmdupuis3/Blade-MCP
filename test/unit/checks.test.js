@@ -92,11 +92,17 @@ test("bladeCheck: binding kinds pass through verbatim (let mut, param, function)
 });
 
 test("bladeCheck: concreteType is kept when the full tier resolved one", async () => {
-  const ctx = makeCtx({ payload: checkRich });
+  // The compiler sends `concreteType` only where monomorphization resolved a
+  // strictly more concrete spelling; the rich fixture has none, so graft one on.
+  const payload = JSON.parse(JSON.stringify(checkRich));
+  const obs = payload.bindings.find((b) => b.name === "obs");
+  obs.concreteType = "Array<Int64 like Idx<2>, Idx<2>>";
+  obs.type = "Array<T like Idx<2>, Idx<2>>";
+  const ctx = makeCtx({ payload });
   const s = (await checks.bladeCheck({ source: "x" }, ctx)).structuredContent;
-  const store = s.bindings.find((b) => b.name === "store");
-  assert.equal(store.concreteType, "Void");
-  assert.equal(s.bindings.find((b) => b.name === "obs").concreteType, undefined);
+  assert.equal(s.bindings.find((b) => b.name === "obs").concreteType, "Array<Int64 like Idx<2>, Idx<2>>");
+  // A store handle has no run-time type: the compiler never upgrades it to "Void".
+  assert.equal(s.bindings.find((b) => b.name === "store").concreteType, undefined);
 });
 
 test("bladeCheck: a function's hover-formatted type is flattened to one line", async () => {
