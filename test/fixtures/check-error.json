@@ -1,37 +1,22 @@
 {
   "version": 1,
   "diagnostics": [
-    {
-      "severity": "error",
-      "line": 3,
-      "col": 9,
-      "endLine": 3,
-      "endCol": 10,
-      "message": "argument extent mismatch: 'w' declared Idx<4>, argument 'a' has extent Idx<2>",
-      "code": "BL3016"
-    },
-    {
-      "severity": "warning",
-      "line": 1,
-      "col": 1,
-      "endLine": 1,
-      "endCol": 1,
-      "message": "unattributed warning with no registry code, for the code:null trimming path"
-    }
+    {"severity":"error","line":3,"col":11,"endLine":3,"endCol":12,"message":"argument 1: extent mismatch on index slot 1 -- the parameter declares Idx<4> but the argument has Idx<2>. A LITERAL parameter extent is baked into the emitted loop bounds and result allocations (a symbolic extent like Idx<n> reads the argument's extent at runtime instead), so this reads past the argument's allocation rather than merely disagreeing. Make the extents match, or declare the parameter over a symbolic extent.","code":"BL3016"},
+    {"severity":"warning","line":1,"col":1,"endLine":1,"endCol":1,"message":"SYNTHETIC: a diagnostic with no registry code, for the code:null trimming path"}
   ],
   "bindings": [
-    { "name": "f", "kind": "function", "line": 1, "col": 10, "endLine": 1, "endCol": 11, "type": "(Array<Float64 like Idx<4>>) -> Float64" },
-    { "name": "a", "kind": "value", "line": 2, "col": 5, "endLine": 2, "endCol": 6, "type": "Array<Float64 like Idx<2>>" },
-    { "name": "r", "kind": "value", "line": 3, "col": 5, "endLine": 3, "endCol": 6, "type": "Float64" }
-  ],
-  "kernels": [],
-  "calls": [],
-  "references": [
-    { "name": "f", "kind": "function", "def": { "line": 1, "col": 10, "endLine": 1, "endCol": 11 }, "uses": [{ "line": 3, "col": 9, "endLine": 3, "endCol": 10 }] },
-    { "name": "a", "kind": "value", "def": { "line": 2, "col": 5, "endLine": 2, "endCol": 6 }, "uses": [{ "line": 3, "col": 11, "endLine": 3, "endCol": 12 }] },
-    { "name": "r", "kind": "value", "def": { "line": 3, "col": 5, "endLine": 3, "endCol": 6 }, "uses": [] },
-    { "name": "Idx", "kind": "type", "def": null, "uses": [{ "line": 1, "col": 30, "endLine": 1, "endCol": 33 }, { "line": 2, "col": 20, "endLine": 2, "endCol": 23 }] }
+    {"name":"f","kind":"function","line":1,"col":1,"type":"(\n    w: Array<Float64 like Idx<4>>\n) -> Float64","params":[{"name":"w","type":"Array<Float64 like Idx<4>>"}],"ret":"Float64","deducedComm":[],"endLine":1,"endCol":81},
+    {"name":"w","kind":"param","line":1,"col":1,"type":"Array<Float64 like Idx<4>>","endLine":1,"endCol":81},
+    {"name":"a","kind":"let","line":2,"col":1,"type":"Array<Float64 like Idx<2>>","endLine":2,"endCol":47}
   ],
   "providers": [],
-  "deduced": []
+  "deduced": [],
+  "calls": [],
+  "kernels": [],
+  "references": [
+    {"name":"f","kind":"function","def":{"line":1,"col":10,"endLine":1,"endCol":11},"uses":[]},
+    {"name":"w","kind":"param","def":{"line":1,"col":12,"endLine":1,"endCol":13},"uses":[{"line":1,"col":56,"endLine":1,"endCol":57},{"line":1,"col":63,"endLine":1,"endCol":64},{"line":1,"col":70,"endLine":1,"endCol":71},{"line":1,"col":77,"endLine":1,"endCol":78}]},
+    {"name":"a","kind":"value","def":{"line":2,"col":5,"endLine":2,"endCol":6},"uses":[]},
+    {"name":"Idx","kind":"type","def":null,"uses":[{"line":1,"col":33,"endLine":1,"endCol":36},{"line":2,"col":27,"endLine":2,"endCol":30}]}
+  ]
 }

@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "diagnostics": [
+    {"severity":"warning","line":20,"col":13,"endLine":20,"endCol":14,"message":"implicit numeric conversion: this Int64 operand is converted to Float64 by mixed-type promotion; write Float64(...) around it to make the conversion explicit (or convert the other operand instead)","code":"BL3020"}
+  ],
+  "bindings": [
+    {"name":"store","kind":"let","line":3,"col":1,"type":"store","concreteType":"Void","endLine":3,"endCol":30},
+    {"name":"obs","kind":"let","line":4,"col":1,"type":"Array<Int64 like Idx<2>, Idx<2>>","providerRead":{"store":"store","member":"vars.data"},"endLine":4,"endCol":36},
+    {"name":"saved","kind":"let","line":5,"col":1,"type":"Void","providerWrite":{"store":"store","member":"vars.data"},"endLine":5,"endCol":40},
+    {"name":"dot","kind":"function","line":8,"col":1,"type":"(\n    a: Array<T like Idx<_>>,\n    b: Array<T like Idx<_>>\n) -> T","doc":"Sum of products of two rows.","params":[{"name":"a","type":"Array<T like Idx<_>>"},{"name":"b","type":"Array<T like Idx<_>>"}],"ret":"T","where":["comm(a, b)"],"deducedComm":["comm(a, b)"],"endLine":8,"endCol":67},
+    {"name":"a","kind":"param","line":8,"col":1,"type":"Array<T like Idx<_>>","endLine":8,"endCol":67},
+    {"name":"b","kind":"param","line":8,"col":1,"type":"Array<T like Idx<_>>","endLine":8,"endCol":67},
+    {"name":"scale","kind":"function","line":10,"col":1,"type":"(\n    a: Float64,\n    s: Float64\n) -> Float64","params":[{"name":"a","type":"Float64"},{"name":"s","type":"Float64","default":"2.0"}],"ret":"Float64","deducedComm":[],"endLine":13,"endCol":2},
+    {"name":"a","kind":"param","line":10,"col":1,"type":"Float64","endLine":13,"endCol":2},
+    {"name":"s","kind":"param","line":10,"col":1,"type":"Float64","endLine":13,"endCol":2},
+    {"name":"k","kind":"let","line":11,"col":5,"type":"(Float64) -> Float64","endLine":11,"endCol":40},
+    {"name":"total","kind":"let mut","line":15,"col":1,"type":"Int64","endLine":15,"endCol":18},
+    {"name":"a","kind":"let","line":16,"col":1,"type":"Float64","endLine":16,"endCol":19},
+    {"name":"cross","kind":"function","line":18,"col":1,"type":"(\n    x: Array<T like Idx<_>>,\n    y: Array<T like Idx<_>>\n) -> T","params":[{"name":"x","type":"Array<T like Idx<_>>"},{"name":"y","type":"Array<T like Idx<_>>"}],"ret":"T","deducedComm":["comm(x, y)"],"endLine":18,"endCol":52},
+    {"name":"x","kind":"param","line":18,"col":1,"type":"Array<T like Idx<_>>","endLine":18,"endCol":52},
+    {"name":"y","kind":"param","line":18,"col":1,"type":"Array<T like Idx<_>>","endLine":18,"endCol":52},
+    {"name":"n","kind":"let","line":19,"col":1,"type":"Int64","endLine":19,"endCol":10},
+    {"name":"ratio","kind":"let","line":20,"col":1,"type":"Float64","endLine":20,"endCol":20}
+  ],
+  "providers": [
+    {"store":"store","alias":"c","provider":"csv","path":"obs.csv","line":3,"col":1,"indexTypes":[],"dims":[],"vars":[{"name":"data","type":"Array<Int64 like Idx<2>, Idx<2>>"}]}
+  ],
+  "deduced": [
+    {"kind":"comm","owner":"cross","left":"x","right":"y","index":0,"line":18,"col":34,"endLine":18,"endCol":52}
+  ],
+  "calls": [
+    {"name":"read","line":4,"col":11,"endLine":4,"endCol":36,"ret":"Array<Int64 like Idx<2>, Idx<2>>","args":["Array<Int64 like Idx<2>, Idx<2>>"]},
+    {"name":"reduce","line":8,"col":49,"endLine":8,"endCol":67,"ret":"T?10003","args":["Array<T?10003 like Idx<_>>","T?10003 -> T?10003 -> T?10003"]},
+    {"name":"reduce","line":18,"col":34,"endLine":18,"endCol":52,"ret":"T?10006","args":["Array<T?10006 like Idx<_>>","T?10006 -> T?10006 -> T?10006"]}
+  ],
+  "kernels": [],
+  "references": [
+    {"name":"store","kind":"value","def":{"line":3,"col":5,"endLine":3,"endCol":10},"uses":[{"line":4,"col":11,"endLine":4,"endCol":16}]},
+    {"name":"obs","kind":"value","def":{"line":4,"col":5,"endLine":4,"endCol":8},"uses":[{"line":5,"col":36,"endLine":5,"endCol":39}]},
+    {"name":"saved","kind":"value","def":{"line":5,"col":5,"endLine":5,"endCol":10},"uses":[]},
+    {"name":"dot","kind":"function","def":{"line":8,"col":10,"endLine":8,"endCol":13},"uses":[]},
+    {"name":"a","kind":"param","def":{"line":8,"col":14,"endLine":8,"endCol":15},"uses":[{"line":8,"col":56,"endLine":8,"endCol":57}]},
+    {"name":"b","kind":"param","def":{"line":8,"col":22,"endLine":8,"endCol":23},"uses":[{"line":8,"col":60,"endLine":8,"endCol":61}]},
+    {"name":"scale","kind":"function","def":{"line":10,"col":10,"endLine":10,"endCol":15},"uses":[{"line":16,"col":9,"endLine":16,"endCol":14}]},
+    {"name":"a","kind":"param","def":{"line":10,"col":16,"endLine":10,"endCol":17},"uses":[{"line":12,"col":7,"endLine":12,"endCol":8}]},
+    {"name":"s","kind":"param","def":{"line":10,"col":28,"endLine":10,"endCol":29},"uses":[{"line":11,"col":39,"endLine":11,"endCol":40}]},
+    {"name":"k","kind":"local","def":{"line":11,"col":9,"endLine":11,"endCol":10},"uses":[{"line":12,"col":5,"endLine":12,"endCol":6}]},
+    {"name":"a","kind":"param","def":{"line":11,"col":20,"endLine":11,"endCol":21},"uses":[{"line":11,"col":35,"endLine":11,"endCol":36}]},
+    {"name":"total","kind":"value","def":{"line":15,"col":9,"endLine":15,"endCol":14},"uses":[]},
+    {"name":"a","kind":"value","def":{"line":16,"col":5,"endLine":16,"endCol":6},"uses":[]},
+    {"name":"cross","kind":"function","def":{"line":18,"col":10,"endLine":18,"endCol":15},"uses":[]},
+    {"name":"x","kind":"param","def":{"line":18,"col":16,"endLine":18,"endCol":17},"uses":[{"line":18,"col":41,"endLine":18,"endCol":42}]},
+    {"name":"y","kind":"param","def":{"line":18,"col":24,"endLine":18,"endCol":25},"uses":[{"line":18,"col":45,"endLine":18,"endCol":46}]},
+    {"name":"n","kind":"value","def":{"line":19,"col":5,"endLine":19,"endCol":6},"uses":[{"line":20,"col":13,"endLine":20,"endCol":14}]},
+    {"name":"ratio","kind":"value","def":{"line":20,"col":5,"endLine":20,"endCol":10},"uses":[]}
+  ]
+}

@@ -17,6 +17,11 @@ Environment:
   BLADE_EXE         compiler binary (used when --compiler is absent)
   BLADE_REPO        Blade checkout root (enables blade-docs:// resources)
   BLADE_CORPUS_DIR  tests/corpus root override
+  BLADE_GR_PATH     GR installation root (plots as images); GRDIR is honoured next
+
+Compiler discovery: --compiler, then BLADE_EXE, then the newest build
+(bin/Release or bin/Debug) of the BLADE_REPO checkout or of a sibling ../Blade
+checkout, then "Blade" on PATH.
 `;
 
 function parseArgv(argv) {

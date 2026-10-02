@@ -91,19 +91,30 @@ test("resolveGr: nothing found is a non-fatal {ok:false} with an actionable reas
   assert.match(r.reason, /BLADE_GR_PATH/);
 });
 
-test("grEnv: sets GRDIR/GKS_WSTYPE, prepends <grdir>/bin to PATH, drops GR_DISPLAY", () => {
+test("grEnv: sets GRDIR/GKS_WSTYPE and drops GR_DISPLAY", () => {
   const out = gr.grEnv("C:/gr", { PATH: "C:/windows", GR_DISPLAY: "gksqt", KEEP: "me" });
   assert.equal(out.GRDIR, "C:/gr");
   assert.equal(out.GKS_WSTYPE, "100");
   assert.equal(out.GR_DISPLAY, undefined);
   assert.equal(out.KEEP, "me");
-  assert.equal(out.PATH, path.join("C:/gr", "bin") + path.delimiter + "C:/windows");
 });
 
-test("grEnv: preserves the existing PATH key's CASE — a second 'PATH' would be ignored by Windows", () => {
-  const out = gr.grEnv("C:/gr", { Path: "C:/windows" });
-  assert.equal(out.PATH, undefined);
-  assert.match(out.Path, /^C:[\\/]gr[\\/]bin/);
+test("grEnv: leaves PATH exactly as it was — GR's bundled GCC runtime DLLs must not shadow the toolchain's", () => {
+  // <grdir>/bin holds its own libstdc++-6.dll / libgcc_s_seh-1.dll /
+  // libwinpthread-1.dll. Ahead of the toolchain on the serve process's PATH,
+  // they are what g++'s executables load, and g++ exits 1 with no output: the
+  // compiled fallback lane dies wherever plots work. The compiler puts that
+  // directory on its GR WORKER's PATH by itself.
+  const out = gr.grEnv("C:/gr", { PATH: "C:/msys64/ucrt64/bin;C:/windows" });
+  assert.equal(out.PATH, "C:/msys64/ucrt64/bin;C:/windows");
+
+  // ...whatever the key's case, and without minting a second PATH variable
+  const mixed = gr.grEnv("C:/gr", { Path: "C:/windows" });
+  assert.equal(mixed.Path, "C:/windows");
+  assert.equal(mixed.PATH, undefined);
+
+  // ...and none is invented where there was none
+  assert.equal(gr.grEnv("C:/gr", {}).PATH, undefined);
 });
 
 test("grEnv: does not mutate the base environment", () => {

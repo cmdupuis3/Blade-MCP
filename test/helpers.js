@@ -134,4 +134,61 @@ function spawnFakeServe(extraEnv) {
   return { proc, send, waitFor, waitForExit, lines, dispose };
 }
 
-module.exports = { spawnFakeServe, FAKE_SERVE_PATH, makeFakeGrRoot, NO_SUCH_GR };
+// --- the programs behind test/fixtures/check-*.json -----------------------------
+//
+// Each fixture is the real compiler's tier-full check payload for one of these
+// sources (minus `id`/`tier`), which is what lets the integration suite
+// re-derive them from a live compiler and fail when the wire shape moves. To
+// regenerate one: check the source at tier full with `raw: true` and store the
+// payload, keeping check-error.json's two appended SYNTHETIC entries.
+
+const CLEAN_SOURCE = "let x = 1\nlet y = x + 1\n";
+
+const ERROR_SOURCE = [
+  "function f(w: Array<Float64 like Idx<4>>) -> Float64 = w(0) + w(1) + w(2) + w(3)",
+  "let a: Array<Float64 like Idx<2>> = [1.0, 2.0]",
+  "let r = f(a)",
+  "",
+].join("\n");
+
+/** The csv `RICH_SOURCE` loads; must sit beside the checked path as obs.csv. */
+const RICH_CSV = "1,2\n3,4\n";
+
+/** A provider store read and written, a declared and a deduced symmetry, a
+ *  defaulted parameter, a function-body local, a `let mut`, an implicit
+ *  conversion (BL3020) — and `a` bound four ways (two function parameters, a
+ *  lambda parameter, a top-level value). */
+const RICH_SOURCE = [
+  "import csv as c",
+  "",
+  'let store = c.load("obs.csv")',
+  "let obs = store.vars.data |> c.read",
+  'let saved = c.write("obs_out.csv", obs)',
+  "",
+  "/// Sum of products of two rows.",
+  "function dot(a: T^1, b: T^1) where comm(a, b) = reduce(a * b, (+))",
+  "",
+  "function scale(a: Float64, s: Float64 = 2.0) -> Float64 = {",
+  "    let k = lambda(a: Float64) -> a * s",
+  "    k(a)",
+  "}",
+  "",
+  "let mut total = 0",
+  "let a = scale(1.5)",
+  "",
+  "function cross(x: T^1, y: T^1) = reduce(x * y, (+))",
+  "let n = 3",
+  "let ratio = n * 0.5",
+  "",
+].join("\n");
+
+module.exports = {
+  spawnFakeServe,
+  FAKE_SERVE_PATH,
+  makeFakeGrRoot,
+  NO_SUCH_GR,
+  CLEAN_SOURCE,
+  ERROR_SOURCE,
+  RICH_SOURCE,
+  RICH_CSV,
+};

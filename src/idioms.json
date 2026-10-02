@@ -1,142 +1,345 @@
 [
   {
     "intent": "elementwise operation over arrays sharing an index space",
-    "keywords": ["elementwise", "zip", "co-iterate", "pointwise", "map over two arrays", "same shape", "add arrays"],
-    "corpus": ["tests/corpus/bracketed/011_elementwise_mask_and.blade", "tests/corpus/bracketed/012_elementwise_compare.blade", "tests/corpus/diagnostics/058_one_param_kernel_over_zip.blade"],
-    "examples": [],
-    "note": "Write `A + B`, or `method_for(zip(A, B)) <@> f` for a custom kernel. `method_for(zip(A, B))` co-iterates; `method_for(A, B)` is the OUTER PRODUCT — confusing them silently changes the output rank."
+    "keywords": ["elementwise", "zip", "co-iterate", "pointwise", "map over two arrays", "same shape", "add arrays", "apply a function to every element", "lift", "vectorized"],
+    "corpus": ["tests/corpus/bracketed/011_elementwise_mask_and.blade", "tests/corpus/bracketed/012_elementwise_compare.blade", "tests/corpus/intrinsics/006_array_operand.blade", "tests/corpus/diagnostics/058_one_param_kernel_over_zip.blade"],
+    "examples": ["examples/03_signal_conditioning.blade"],
+    "note": "Arithmetic and math intrinsics lift over arrays: `A + B`, `cos(A)`. For a custom kernel co-iterate with zip: `method_for(zip(A, B)) <@> lambda(a, b) -> a * b + 1.0 |> compute`. `method_for(zip(A, B))` co-iterates; `method_for(A, B)` is the OUTER PRODUCT — confusing them silently changes the output rank. A kernel over a zip takes one parameter per zipped array."
   },
   {
     "intent": "all-pairs / outer product / broadcast between two arrays",
-    "keywords": ["outer product", "all pairs", "cross product", "broadcast", "[+]", "[*]", "cartesian", "pairwise"],
-    "corpus": ["tests/corpus/bracketed/001_bracketed_arithmetic.blade", "tests/corpus/bracketed/004_bracketed_mixed.blade", "tests/corpus/bracketed/013_broadcast_compare.blade"],
-    "examples": [],
-    "note": "Bracketed operators `A [+] B` / `A [*] B` build the rank-(r+s) outer result; `method_for(A, B) <@> f` does the same with your own kernel. Never nest loops for this."
+    "keywords": ["outer product", "all pairs", "cross product", "broadcast", "[+]", "[*]", "cartesian", "pairwise", "every combination", "distance matrix"],
+    "corpus": ["tests/corpus/bracketed/001_bracketed_arithmetic.blade", "tests/corpus/bracketed/004_bracketed_mixed.blade", "tests/corpus/bracketed/013_broadcast_compare.blade", "tests/corpus/bracketed/016_outer_op_multi_axis.blade"],
+    "examples": ["examples/10_pairwise_normalized_sums.blade"],
+    "note": "Bracketed operators build the rank-(r+s) outer result: `A [+] B`, `A [*] B`. With your own kernel: `method_for(A, B) <@> lambda(a, b) -> a - b |> compute`. Never nest loops for this — and if the pairwise array is only an intermediate you then fold, do not materialize it at all (see the normalized pairwise sums idiom)."
   },
   {
     "intent": "reduce / fold an array to a scalar, or peel one axis",
-    "keywords": ["reduce", "fold", "sum", "total", "aggregate", "accumulate", "axes", "partial reduction", "row sums"],
-    "corpus": ["tests/corpus/bracketed/014_bracketed_compute.blade", "tests/corpus/diagnostics/066_reduce_axes_zero.blade", "tests/corpus/sql-reduce/001_reduce_sum_section.blade"],
+    "keywords": ["reduce", "fold", "sum", "total", "aggregate", "accumulate", "axes", "partial reduction", "row sums", "maximum", "minimum", "left fold", "product"],
+    "corpus": ["tests/corpus/sql-reduce/001_reduce_sum_section.blade", "tests/corpus/sql-reduce/003_reduce_lambda_max.blade", "tests/corpus/sql-reduce/021_reduce_rank_k.blade", "tests/corpus/sql-reduce/023_reduce_partial_axis.blade", "tests/corpus/diagnostics/066_reduce_axes_zero.blade"],
     "examples": ["examples/01_weather_stations.blade"],
-    "note": "Rank 1: `reduce(A, (+))`. Rank k to a scalar: `reduce(A, (+), axes = k)`. A BARE `reduce` on rank >= 2 defaults to axes = 1 — it peels the innermost axis and returns an array, not a scalar. reduce folds right-to-left, which matters the moment your kernel is not commutative."
+    "note": "Rank 1: `reduce(v, (+))`. On rank >= 2 a BARE reduce defaults to `axes = 1`: `reduce(G, (+))` peels the innermost axis and returns an ARRAY (row sums), not a scalar; the full fold is `reduce(G, (+), axes = 2)` (axes = the rank). reduce is a LEFT fold in ascending storage order, innermost axis first — `reduce([1, 2, 3, 4], lambda(a, b) -> a - b)` is ((1 - 2) - 3) - 4 = -8 — which is decisive the moment the kernel is not commutative or associative. A lambda kernel can take a seed as third argument: `reduce(G(0), lambda(a, b) -> if a > b then a else b, -1.0e300)`."
   },
   {
     "intent": "several statistics in one pass over the data",
-    "keywords": ["one pass", "single traversal", "multiple accumulators", "mean and variance", "fusion", "<&!>", "count and sum"],
-    "corpus": ["tests/corpus/loops/019_fusion_basic.blade", "tests/corpus/loops/021_fusion_3_way.blade"],
+    "keywords": ["one pass", "single traversal", "multiple accumulators", "mean and variance", "fusion", "<&!>", "count and sum", "sum and count", "sum and sum of squares", "at the same time", "simultaneously", "reduction join"],
+    "corpus": ["tests/corpus/loops/019_fusion_basic.blade", "tests/corpus/loops/021_fusion_3_way.blade", "tests/corpus/loops/060_reduce_fused_pool.blade", "tests/corpus/loops/139_reduction_join_two_legs.blade"],
     "examples": ["examples/03_signal_conditioning.blade", "examples/05_streaming_telemetry.blade"],
-    "note": "Fuse the kernels into one loop object and destructure the result: `let (s, ss, n) = reduce((L <@> k_id) <&!> (L <@> square) <&!> (L <@> k_one), (+))`. One traversal, three accumulators, no mutation."
+    "note": "Fuse the kernels into one loop object with `<&!>` and destructure the result: with `let L = method_for(A)`, write `let (s, ss, n) = reduce((L <@> k_id) <&!> (L <@> square) <&!> (L <@> k_one), (+))`. One traversal, three accumulators, no mutation. Separate `reduce` calls would be separate passes."
   },
   {
     "intent": "filter rows / WHERE clause / select a subset",
-    "keywords": ["filter", "where", "select", "subset", "predicate", "mask", "compound", "quality control", "drop bad rows"],
-    "corpus": ["tests/corpus/sql-masks/001_mask_basic.blade", "tests/corpus/sql-masks/004_mask_with_compute.blade", "tests/corpus/fallback/002_compound_present_zero.blade"],
+    "keywords": ["filter", "where", "select", "subset", "predicate", "mask", "compound", "quality control", "drop bad rows", "boolean indexing", "keep only"],
+    "corpus": ["tests/corpus/sql-masks/001_mask_basic.blade", "tests/corpus/sql-masks/005_mask_composition.blade", "tests/corpus/bracketed/011_elementwise_mask_and.blade", "tests/corpus/sql-semijoins/007_semijoin_then_mask.blade"],
     "examples": ["examples/01_weather_stations.blade"],
-    "note": "`mask(xs, pred)` builds the predicate, `compound(data, mask)` applies it; compose masks with `&&` / `||`. There is no filter loop."
+    "note": "`mask(qc, lambda(q) -> q == 0)` builds a Bool presence array over the data's own index space, and `compound(temp, keep)` applies one. Masks over one index space compose with `&&` / `||` — bind the composed mask to a name first (`let keep = qc_ok && warm`); writing the conjunction inline inside compound typechecks but is refused at codegen (BL7004). A conjunction of conditions on ONE column is simply one predicate. The filtered array keeps the ORIGINAL coordinates (reads are by position in the source space), so it stays aligned with companion columns; `extents(good)` is the count and `reduce(good, (+))` folds the kept cells. There is no filter loop."
+  },
+  {
+    "intent": "iterate a constrained index domain (band, triangle, selection rule)",
+    "keywords": ["banded", "band matrix", "triangle", "triangular domain", "selection rule", "constrained indices", "static struct", "only valid index pairs", "sparse pattern", "enumerable domain", "idx_card", "tridiagonal"],
+    "corpus": ["tests/corpus/index-types/260_domain_band_closed_form.blade", "tests/corpus/index-types/262_domain_triangle_nat_fields.blade", "tests/corpus/index-types/263_domain_cg_solved_innermost.blade", "tests/corpus/index-types/265_domain_nonlinear_over_cap_rejects.blade"],
+    "examples": ["examples/06_cg_selection_rules.blade"],
+    "note": "Declare the domain as a constrained `static struct` and use its NAME as an index type: `static struct Band { i: Int<min=0, max=8>, j: Int<min=0, max=8> } where abs(i - j) <= 2`, then `method_for(range<Band>) <@> lambda(i, j) -> i * 10 + j |> compute`. Linear conjuncts enumerate in closed form, so only the solutions are visited — never the dense box with an `if` in the kernel, never a mask over the whole box. The result is sparse-shaped: full-key reads `R((8, 6))`, flat fold `reduce(R, (+))`; `idx_card(Band)` is the compile-time count. Non-linear constraints are tabled below a cap (BL4010 advisory) and refused above it (BL4020)."
   },
   {
     "intent": "stencil, sliding window, lags, finite differences",
-    "keywords": ["stencil", "window", "rolling", "neighbors", "halo", "finite difference", "lag", "moving average", "central difference"],
-    "corpus": ["tests/corpus/loops/072_halo_central_difference.blade", "tests/corpus/loops/073_halo_forward_backward.blade", "tests/corpus/loops/074_halo_symmetric_sum.blade"],
+    "keywords": ["stencil", "window", "rolling", "neighbors", "halo", "finite difference", "lag", "moving average", "central difference", "laplacian", "convolution"],
+    "corpus": ["tests/corpus/loops/072_halo_central_difference.blade", "tests/corpus/loops/073_halo_forward_backward.blade", "tests/corpus/loops/074_halo_symmetric_sum.blade", "tests/corpus/loops/076_halo_2d_separable.blade"],
     "examples": ["examples/08_burgers_les.blade"],
-    "note": "`method_for(halo<I, [-1, 0, 1]>) <@> lambda(w) -> A(w(1)) - A(w(-1))`. The halo carries the offsets, so there is no index arithmetic and no edge guards to get wrong. Only `w(o)` offsets declared in the halo are in scope."
+    "note": "`method_for(halo<I, [-1, 0, 1]>) <@> lambda(w) -> A(w(1)) - A(w(-1)) |> compute`. The halo carries the offsets and shrinks the traversal to the interior, so there is no index arithmetic and there are no edge guards to get wrong (the result has the interior extent). Only the offsets declared in the halo may be read through the window; an extent that cannot host the window is refused (BL3016) or aborts at run time (BL8009)."
   },
   {
     "intent": "generate an index range instead of materializing iota",
-    "keywords": ["range", "iota", "indices", "counter", "sequence of integers", "enumerate", "virtual array"],
-    "corpus": ["tests/corpus/anon-ranges/001_anon_range_zero_based.blade", "tests/corpus/anon-ranges/002_anon_range_offset.blade"],
+    "keywords": ["range", "iota", "arange", "indices", "counter", "sequence of integers", "enumerate", "virtual array", "0..n", "0 to n", "integers from 0", "index array", "index generation"],
+    "corpus": ["tests/corpus/anon-ranges/001_anon_range_zero_based.blade", "tests/corpus/anon-ranges/005_anon_range_bare_binding.blade", "tests/corpus/anon-ranges/007_anon_range_arithmetic.blade", "tests/corpus/anon-ranges/012_anon_range_call_argument.blade"],
     "examples": [],
-    "note": "`range<Idx<8>>` is a virtual array — it costs nothing to iterate and its extents fold at compile time. Map over it with `method_for(range<...>) <@> lambda(i) -> ...`."
+    "note": "An anonymous range is a first-class rank-1 array: `let idx = 0..8`, and it takes arithmetic directly — `(0..8) * (0..8)`. Use `range<I>` instead when the NAMED index tag should flow into the result or you need its subscript proofs: `method_for(range<I>) <@> lambda(i) -> i |> compute`; `extents(range<I>)` folds at compile time. Do not materialize an iota array, and do not wrap a range in an identity map just to compute with it."
+  },
+  {
+    "intent": "coordinate axis / linspace / evenly spaced grid",
+    "keywords": ["linspace", "coordinate axis", "grid points", "evenly spaced", "affine in the index", "x axis", "time axis", "mesh", "arange with step"],
+    "corpus": ["tests/corpus/anon-ranges/008_anon_range_linspace.blade", "tests/corpus/anon-ranges/007_anon_range_arithmetic.blade", "tests/corpus/casts/007_array_lift.blade"],
+    "examples": ["examples/10_pairwise_normalized_sums.blade"],
+    "note": "Implicit lifting over the range: `let axis = x0 + dx * Float64(0..5)`. The cast lifts elementwise and makes the int-to-float conversion explicit. Do NOT write `method_for(range<I>) <@> lambda(j) -> x0 + dx * Float64(j)` for a body that is merely affine in the index — that is a lower rung of the idiom ladder."
+  },
+  {
+    "intent": "sum or product of an index range (triangular number, factorial)",
+    "keywords": ["sum of integers", "sum 0 to n", "sum of an index range", "sum of a range", "factorial", "triangular number", "product of a range", "sigma notation", "sum over i"],
+    "corpus": ["tests/corpus/anon-ranges/006_anon_range_reduce.blade", "tests/corpus/anon-ranges/003_anon_range_with_array.blade"],
+    "examples": [],
+    "note": "Fold the range itself: `reduce(0..5, (+))`, `reduce(1..5, (*))`. No accumulator, and no map wrapped around the range first."
+  },
+  {
+    "intent": "convert between integer and float / numeric casts and rounding",
+    "keywords": ["cast", "convert", "int to float", "float to int", "Float64", "Int64", "round", "floor", "ceil", "truncate", "type conversion", "BL3019", "BL3020", "implicit conversion", "divide by count", "numeric width", "width conversion", "numeric conversion", "precision"],
+    "corpus": ["tests/corpus/casts/001_int_to_float.blade", "tests/corpus/casts/004_rounding_gate.blade", "tests/corpus/casts/007_array_lift.blade", "tests/corpus/casts/014_implicit_warning.blade", "tests/corpus/casts/015_extents_idiom.blade", "tests/corpus/casts/009_int_gate_rejects.blade"],
+    "examples": [],
+    "note": "A scalar type name in call position is the cast: `Float64(n)`, `Float32(x)`; arrays lift elementwise (`Float64(0..4)`). Float to int must show its rounding at the cast site — `Int64(floor(x))` or `Int64(ceil(x))`; a bare `Int64(x)` on a float is refused (BL3019). An implicit int-to-float mix of a non-literal operand warns BL3020, so write the count cast in a mean: `reduce(A, (+)) / Float64(extents(A))`. Never use `* 1.0` fudges."
   },
   {
     "intent": "pipeline of stages, composing transformations lazily",
-    "keywords": ["pipeline", "compose", "chain", "stages", "object_for", ">>@", "compute", "lazy", "deferred"],
+    "keywords": ["pipeline", "compose", "chain", "stages", "object_for", ">>@", "compute", "lazy", "deferred", "function composition", "no temporaries"],
     "corpus": ["tests/corpus/loops/043_compose_obj_basic.blade", "tests/corpus/loops/045_duality_theorem.blade", "tests/corpus/deferred-concrete/001_functor_map_over_array.blade"],
     "examples": ["examples/03_signal_conditioning.blade"],
-    "note": "Compose values, not calls: `let stage = object_for(f) >>@ object_for(g)`, apply with `<@>`, materialize with `|> compute`. Nothing runs until compute, so no per-stage temporaries."
+    "note": "Compose values, not calls: `let condition = object_for(calibrate) >>@ object_for(deadband)`, apply with `<@>` and materialize with `|> compute`: `condition <@> r0 |> compute`. Nothing runs until compute, so there are no per-stage temporaries."
   },
   {
     "intent": "running state, recurrence, time stepping, dynamic programming",
-    "keywords": ["recurrence", "running", "cumulative", "time step", "iterate", "state", "let rec", "accumulator", "rk4", "dynamic programming", "prefix"],
+    "keywords": ["recurrence", "running", "cumulative", "time step", "iterate", "state", "let rec", "accumulator", "rk4", "dynamic programming", "prefix", "cumsum", "cumulative sum", "running total", "simulation", "ode"],
     "corpus": ["tests/corpus/recursive-arrays/002_running_reduce.blade", "tests/corpus/recursive-arrays/007_rk4_litmus.blade", "tests/corpus/recursive-arrays/008_nested_dp.blade", "tests/corpus/recursive-arrays/009_zero_history.blade"],
-    "examples": ["examples/05_streaming_telemetry.blade"],
-    "note": "`let rec x: Array<Float like Step> = match x with | zero -> zero | prefix :: n -> prefix :: f(prefix(n - 1))`. This is the replacement for `let mut` + a loop: one pre-allocated buffer, no recursion frames. Reads past the built prefix are implicitly zero, so lag schemes need NO bounds guards."
+    "examples": ["examples/05_streaming_telemetry.blade", "examples/08_burgers_les.blade"],
+    "note": "Sequential structure is a recursive array, by structural induction on the leading axis: `let rec x: Array<Float like Step> =` then `match x with`, a `| zero -> zero` arm, a seed arm `| zero :: s -> zero :: 1.0`, and the inductive arm `| prefix :: n -> prefix :: prefix(n - 1) * 0.5 + 1.0`. This replaces `let mut` plus a loop: one pre-allocated buffer, no recursion frames. Reads past the built prefix are implicitly zero, so lag schemes need NO bounds guards. The type annotation is required, the recursion axis is the leading axis, and its extent must be static. Use it only when the step really depends on earlier steps — a body that is just arithmetic in the index is implicit lifting over a range instead."
+  },
+  {
+    "intent": "iterate to convergence / stop when a tolerance is met",
+    "keywords": ["converge", "convergence", "tolerance", "until", "newton", "fixed point", "iterate until", "while guard", "early stop", "budget", "unknown trip count", "BL8010", "until converged", "converged", "stopping criterion", "residual"],
+    "corpus": ["tests/corpus/recursive-arrays/012_while_guard_newton_freeze.blade", "tests/corpus/recursive-arrays/016_while_guard_rank2_freeze.blade", "tests/corpus/recursive-arrays/013_while_guard_budget_aborts.blade", "tests/corpus/recursive-arrays/014_while_guard_on_seed_rejects.blade"],
+    "examples": [],
+    "note": "Put a `while` guard on the INDUCTIVE arm of a `let rec` whose extent is the iteration BUDGET: `| prefix :: n while abs(prefix(n - 1) * prefix(n - 1) - 2.0) > 1.0e-10 -> prefix :: 0.5 * (prefix(n - 1) + 2.0 / prefix(n - 1))`. The array is built while the guard holds and FROZEN once it goes false (the last slice repeats), so `x((7 : It))` is the converged value. If the budget runs out with the guard still true the program aborts (BL8010) rather than returning an unconverged answer. The guard goes on the inductive arm only, and an ordinary match arm guards with `if`, not `while` (BL1003)."
   },
   {
     "intent": "symmetric pairwise statistics: covariance, comoments, gram matrices",
-    "keywords": ["covariance", "symmetric", "pairwise", "comm", "gram", "reynolds", "triangular", "correlation matrix", "self outer product"],
-    "corpus": ["tests/corpus/symmetry/001_triangular_iteration.blade", "tests/corpus/symmetry/003_output_type_same_array_comm.blade", "tests/corpus/functions/012_hm_polymorphic_kernel_through_reynolds.blade", "tests/corpus/functions/038_gram_transpose_unannotated_rank2.blade"],
+    "keywords": ["covariance", "symmetric", "pairwise", "comm", "gram", "reynolds", "triangular", "correlation matrix", "self outer product", "packed storage", "A transpose A"],
+    "corpus": ["tests/corpus/symmetry/001_triangular_iteration.blade", "tests/corpus/symmetry/003_output_type_same_array_comm.blade", "tests/corpus/functions/012_hm_polymorphic_kernel_through_reynolds.blade", "tests/corpus/functions/085_stdlib_stats_module.blade", "tests/corpus/functions/038_gram_transpose_unannotated_rank2.blade"],
     "examples": ["examples/02_portfolio_moments.blade"],
-    "note": "Declare `where comm(a, b)` and let the compiler derive triangular storage and iteration (r! savings). `reynolds(g)` MANUFACTURES a commutative kernel by symmetrization when you cannot annotate one. Symmetric output storage is licensed only when the SAME array occupies the commuting positions."
+    "note": "Declare the kernel commutative — `function covariance(a: T^1, b: T^1) where comm(a, b) -> T^0 =` — and apply it to the SAME array in both positions: `object_for(covariance) <@> (R, R) |> compute`. The compiler derives triangular storage and iteration (r! savings); never hand-write triangular index math. `gram(R, R)` is the BLAS-routed Gram former, and `reynolds(kern)` MANUFACTURES a commutative kernel by symmetrization when you cannot annotate one. Symmetric output storage is licensed only when the same array occupies the commuting positions; two different arrays over the same index space get a dense result."
   },
   {
-    "intent": "one function that works at several ranks (arity polymorphism)",
-    "keywords": ["rank polymorphic", "arity", "generic over rank", "T^k", "any rank", "pack", "former", "multiple arguments"],
-    "corpus": ["tests/corpus/arity/001_poly_type.blade", "tests/corpus/arity/015_pack_former.blade", "tests/corpus/arity/022_comoment_covariance_matrix.blade"],
-    "examples": ["examples/02_portfolio_moments.blade"],
-    "note": "A function typechecks and compiles differently depending on how many array arguments it receives; output rank and symmetry are deduced per call shape. Abstract types are `T^r`; arrays have concrete `Array<T like I, J>` types."
-  },
-  {
-    "intent": "named index types, bounds safety, transposes and reshapes",
-    "keywords": ["index type", "Idx", "SymIdx", "AntisymIdx", "CompoundIdx", "SparseIdx", "OrbIdx", "dimension", "axis identity", "transpose", "bounds"],
-    "corpus": ["tests/corpus/index-types/001_compound_construct_index.blade", "tests/corpus/index-types/029_transpose_rank3.blade"],
-    "examples": ["examples/09_qg_atmosphere.blade"],
-    "note": "Index types are the type system's spine: `Nat<LatIdx>` and `Nat<LonIdx>` do not unify even at equal extent, which is what makes `A(i)` bounds-safe by construction. `()` is application/indexing (curried); `[]` is ONLY tuple/pack access."
-  },
-  {
-    "intent": "units of measure and dimensional safety",
-    "keywords": ["units", "dimensional analysis", "meters", "seconds", "physical quantity", "unit clash", "SI"],
-    "corpus": ["tests/corpus/units/001_unit_base_declaration.blade", "tests/corpus/units/002_unit_derived.blade", "tests/corpus/units/004_unit_arithmetic.blade"],
-    "examples": ["examples/04_trajectory_sensitivity.blade"],
-    "note": "`Unit meters` / `Unit mps = meters / seconds`, then `type Speed = Float<mps>`. A unit clash is a refusal, not a warning — fix the declaration rather than casting around it."
-  },
-  {
-    "intent": "group by a key and aggregate per group",
-    "keywords": ["group by", "aggregate per key", "bucket", "per category", "histogram", "segment", "enum key"],
-    "corpus": ["tests/corpus/sql-group-by/001_groupby_idx_first.blade", "tests/corpus/sql-group-by/002_groupby_idx_sum_two.blade", "tests/corpus/sql-group-by/004_groupby_enum_first.blade"],
-    "examples": ["examples/01_weather_stations.blade"],
-    "note": "Group-by is a relational operator over an Idx or EnumIdx key; the group axis becomes part of the result's type."
-  },
-  {
-    "intent": "build a new leading axis by stacking or joining arrays",
-    "keywords": ["stack", "concatenate", "append arrays", "join", "new axis", "combine arrays", "vstack"],
-    "corpus": ["tests/corpus/stack-join/001_stack_rank1.blade", "tests/corpus/stack-join/002_stack_rank2_fields.blade", "tests/corpus/stack-join/004_join_leading_axis.blade"],
+    "intent": "several solves against one matrix / factor once, solve repeatedly",
+    "keywords": ["lu", "factorization", "factor once", "multiple right-hand sides", "linear solve", "transpose solve", "lu_solve", "reuse factorization", "linear system", "Ax = b"],
+    "corpus": ["tests/corpus/math/083_lu_factor_once_solve_repeatedly.blade", "tests/corpus/math/086_fnbody_lu_factor_once.blade", "tests/corpus/math/070_solve_exact_3x3.blade", "tests/corpus/math/084_lu_solve_extent_mismatch_rejects.blade"],
     "examples": [],
-    "note": "`stack` creates a fresh leading axis; `join` extends one. Off-axis extent disagreement is refused (BL3016) rather than silently truncated."
+    "note": "With `import math as m`: `let f = m.lu(A)` once, then `m.lu_solve(f, b1)` and `m.lu_solve(f, b2)` per right-hand side, and `m.lu_solve_t(f, b1)` for the transposed system. The factorization is a VALUE (a tuple of the packed L\\U factor and the pivots) and the result is bitwise `m.solve(A, b1)`. Calling m.solve once per side refactors A every time."
   },
   {
-    "intent": "return several values at once / tuples and packs",
-    "keywords": ["tuple", "multiple return", "pair", "destructure", "pack", "several outputs"],
-    "corpus": ["tests/corpus/tuples/001_bare_comma_construction.blade", "tests/corpus/tuples/003_tuple_width_ascription.blade", "tests/corpus/tuple-views/001_tuple_view_flat_3_way.blade"],
-    "examples": ["examples/03_signal_conditioning.blade"],
-    "note": "`let (a, b, c) = ...` destructures; `t[0]` indexes a TUPLE (square brackets are never array indexing)."
-  },
-  {
-    "intent": "compile-time constants and compile-time evaluation",
-    "keywords": ["static", "compile time", "constant", "const", "literal extent", "meta"],
-    "corpus": ["tests/corpus/static/001_static_value.blade", "tests/corpus/static/003_static_function.blade", "tests/corpus/static/004_static_dependency_order.blade"],
+    "intent": "Jacobian-vector and vector-Jacobian products without forming the Jacobian",
+    "keywords": ["jvp", "vjp", "jacobian", "forward mode", "directional derivative", "tangent", "cotangent", "newton-krylov", "sensitivity", "matrix-free", "linearization", "hessian-vector"],
+    "corpus": ["tests/corpus/ad-jvp-comb/110_array_valued_jvp_vjp.blade", "tests/corpus/ad-jvp-comb/113_lu_solve_derivative_actions.blade", "tests/corpus/ad-jvp/001_scalar_polynomial_jvp.blade", "tests/corpus/ad-jvp/021_hvp_composition_jvp.blade", "tests/corpus/ad-jvp-comb/112_vjp_unnamed_output_rejected.blade"],
     "examples": [],
-    "note": "`let static n = 4` is immutable everywhere and usable as an extent; `static function`s run at compile time and MAY mutually recurse (runtime functions may not — BL2001)."
+    "note": "With `import ad as ad`: forward mode takes the arguments then one seed per argument and returns the pair (y, J v) — `let (y, dy) = ad.jvp(fwd)(a0, b0, x0, sa, sb, sx)`. The seeded reverse mode takes the output cotangent `w` after the arguments and ACCUMULATES J^T w into `let mut` buffers, returning the primal: `let yv = ad.vjp(fwd)(a0, b0, x0, w, da, db, dx)`. No Jacobian is formed, and never approximate one by finite differences. vjp needs an array-valued function whose body's value is a NAMED array (BL5500 otherwise); through `m.lu_solve(f, b)` both actions are one more solve against the same factors."
+  },
+  {
+    "intent": "random draws that survive chunking, reordering, restart",
+    "keywords": ["monte carlo", "reproducible random", "counter-based", "indexed rng", "uniform_at", "normal_at", "sample identity", "chunked sampling", "parallel random", "restart", "stream", "reproducible chunks", "reproducible draws"],
+    "corpus": ["tests/corpus/rand/019_indexed_uniform_addressed_samples.blade", "tests/corpus/rand/020_indexed_families_chunk_invariance.blade", "tests/corpus/rand/021_indexed_stream_out_of_range_aborts.blade"],
+    "examples": [],
+    "note": "With `import rand as r`, draw ADDRESSED samples: `r.uniform_at(12345, 7, 0, 12)` is (key, stream, offset, n) — cell i is logical sample offset + i, a pure function of its address — so a chunk drawn alone, `r.uniform_at(12345, 7, 8, 4)`, equals the same slice of the whole. The other families follow the pattern (`r.normal_at(12345, 9, 0, 6)`). Slicing a sequenced `r.uniform(key, n)` fill instead shifts every sample when the extent or order changes."
+  },
+  {
+    "intent": "apply a Gram operator to a vector without forming the matrix",
+    "keywords": ["gram_apply", "matrix-free", "normal equations", "A A^T x", "operator action", "covariance times vector", "kernel matrix vector product", "implicit matrix"],
+    "corpus": ["tests/corpus/math/077_gram_apply_same_array.blade", "tests/corpus/math/078_gram_apply_distinct_generic_units.blade", "tests/corpus/math/079_gram_apply_complex_hermitian_action.blade", "tests/corpus/ad-jvp-comb/109_gram_apply_grad_jvp.blade"],
+    "examples": [],
+    "note": "`gram_apply(A, A, x)` is A (A^H x): two rank-1 temporaries, never the N x N matrix, and it differentiates (its adjoint action is itself a gram_apply). Forming `gram(A, B)`, decompacting it and taking a row prodsum builds and reads the whole matrix just to use it once."
+  },
+  {
+    "intent": "per-chunk / per-file work over a chunked or multi-file axis",
+    "keywords": ["chunk", "chunked", "segments", "per file", "blocks", "tiles", "ungroup", "block-wise", "multi-file dataset", "batches", "windows of fixed size", "chunked axis", "per-file", "files"],
+    "corpus": ["tests/corpus/segments/001_segments_regular_grid.blade", "tests/corpus/segments/002_segments_coiterate_two_arrays.blade", "tests/corpus/segments/003_segments_group_bucket.blade", "tests/corpus/segments/012_segments_grid_two_slots.blade", "tests/corpus/segments/007_segments_of_plain_index_rejects.blade"],
+    "examples": [],
+    "note": "Declare the segmentation on the index type — `type CI = Chunked<I, 4>` (the alias IS the axis I) — then `let seg = segments(CI)` is a structural grouping with no key array and no permutation: `group_by(a, seg)` gives one run per chunk for per-run kernels, and `ungroup(g)` reassembles the axis. For store-backed axes the chunk grid is inherited and `files(T)` is the per-file level (docs/features/sql.md section 7c). Do not hand-compute offsets, and do not use `join` here — it mints a fresh axis."
+  },
+  {
+    "intent": "normalized / weighted pairwise sums (kernel smoothing, softmax rows)",
+    "keywords": ["kernel smoothing", "softmax", "attention", "nadaraya-watson", "weighted average", "normalized weights", "boltzmann average", "importance weights", "pairwise weights", "streaming reduction"],
+    "corpus": ["tests/corpus/loops/200_per_row_reduction_join_streams.blade", "tests/corpus/loops/141_reduction_join_shared_deferred.blade", "tests/corpus/loops/206_deferred_outer_product_partial_fold_streams.blade"],
+    "examples": ["examples/10_pairwise_normalized_sums.blade"],
+    "note": "Never build the M x N weight array and fold it twice. Write a per-row kernel over `range<I>` whose body NAMES the deferred producer — `let w = method_for(xs) <@> lambda(b) -> exp(-(xi - b) * (xi - b) / (2.0 * h * h))` (naming it is the sharing declaration; it is never allocated) — and folds it with a reduction join: `let z, u = object_for(<&!>) <@> (reduce(w, (+)), prodsum(w, ys))`, then `u / z`. Both legs run in ONE traversal of j per row. For the one-pass online form use a tuple-state fold."
+  },
+  {
+    "intent": "fold with a tuple-valued running state (online / one-pass accumulator)",
+    "keywords": ["tuple state", "online algorithm", "running maximum and sum", "welford", "online softmax", "state machine fold", "custom accumulator", "logsumexp", "one pass"],
+    "corpus": ["tests/corpus/loops/201_tuple_state_online_fold.blade", "tests/corpus/sql-reduce/008_reduce_init_basic.blade"],
+    "examples": ["examples/10_pairwise_normalized_sums.blade"],
+    "note": "A fold kernel may carry a TUPLE as its running state: map each element to a tuple, `method_for(zip(xs, ys)) <@> lambda(b, y) -> (b, 1.0, y)`, then `reduce` it with a block kernel that reads the slots (`a[0]`, `b[0]`) and returns the merged tuple, seeded with a tuple (`(-1.0e300, 0.0, 0.0)`). The state lives in registers; nothing is materialized. Read the result with `s[2] / s[1]`. reduce is a left fold, so the merge need not be commutative."
+  },
+  {
+    "intent": "which iteration construct to use: implicit lifting, method_for(range), or let rec",
+    "keywords": ["which loop", "idiom ladder", "altitude", "method_for vs let rec", "when to use range", "best practice iteration", "style", "most idiomatic"],
+    "corpus": ["tests/corpus/anon-ranges/008_anon_range_linspace.blade", "tests/corpus/loops/072_halo_central_difference.blade", "tests/corpus/recursive-arrays/002_running_reduce.blade"],
+    "examples": ["examples/01_weather_stations.blade", "examples/03_signal_conditioning.blade", "examples/lsdft.blade"],
+    "note": "Pick the HIGHEST rung the body admits. (1) Implicit lifting — `x0 + dx * Float64(0..6)`, `sin(grid)` — whenever the body is arithmetic in the index or the elements. (2) a loop object over the named range — `method_for(range<I>) <@> lambda(i) -> if i > 2 then wave(i) else 0.0 |> compute` — when the kernel is a block or a gather/conditional, composes with combinators (`>>@`, `<&!>`), is multi-slot or non-plain (SymIdx / CompoundIdx / halo), or should carry the named index tag. (3) `let rec` only for genuinely sequential structure, where a step reads earlier steps. Parallel structure is a loop object; sequential structure is a recursive array; there is nothing else."
   },
   {
     "intent": "I want a for loop / while loop / imperative iteration",
-    "keywords": ["for loop", "while loop", "iterate imperatively", "mutate accumulator", "BL1003", "loop counter", "index arithmetic"],
-    "corpus": ["tests/corpus/diagnostics/045_for_in_removed.blade", "tests/corpus/recursive-arrays/002_running_reduce.blade", "tests/corpus/loops/019_fusion_basic.blade"],
+    "keywords": ["for loop", "while loop", "iterate imperatively", "mutate accumulator", "BL1003", "loop counter", "index arithmetic", "for i in", "do while", "break"],
+    "corpus": ["tests/corpus/diagnostics/045_for_in_removed.blade", "tests/corpus/diagnostics/078_while_loop_steer.blade", "tests/corpus/recursive-arrays/002_running_reduce.blade", "tests/corpus/recursive-arrays/012_while_guard_newton_freeze.blade", "tests/corpus/loops/019_fusion_basic.blade"],
     "examples": [],
-    "note": "The imperative loop was REMOVED from the language and is diagnosed (BL1003) — do not reintroduce it through workarounds. Parallel structure is a loop object (`method_for`/`object_for`); sequential structure is a recursive array (`let rec`). There is nothing else, by design."
+    "note": "The imperative loop was REMOVED and is diagnosed: `for k in 0..3 { s += k }` and `while s < 10 { s += 1 }` are both BL1003 — do not reintroduce them through workarounds. An accumulation is a fold (`reduce(0..3, (+))`), a map is lifting or a loop object (`(0..3) * (0..3)`), a recurrence is a `let rec` recursive array, and an unknown trip count is a `while` guard on its inductive arm."
+  },
+  {
+    "intent": "one function that works at several ranks (arity polymorphism)",
+    "keywords": ["rank polymorphic", "arity", "generic over rank", "T^k", "any rank", "pack", "former", "multiple arguments", "variadic", "Poly"],
+    "corpus": ["tests/corpus/arity/001_poly_type.blade", "tests/corpus/arity/015_pack_former.blade", "tests/corpus/arity/022_comoment_covariance_matrix.blade"],
+    "examples": ["examples/02_portfolio_moments.blade"],
+    "note": "Functions see abstract types — element type plus rank: `function add1(array: T^2) -> T^2 = { array + 1 }`. A pack parameter makes one function arity-polymorphic: `function polySum(args: Poly<T^0>) -> T^0 = {` accepts any number of arguments (`polySum(10, 20, 30)`), reads them with `args[k]` and counts them with `arity(args)`; output rank and symmetry are deduced per call shape. Square brackets index packs and tuples only, never arrays."
+  },
+  {
+    "intent": "named index types, bounds safety, partial indexing and transposes",
+    "keywords": ["index type", "Idx", "SymIdx", "AntisymIdx", "CompoundIdx", "SparseIdx", "OrbIdx", "dimension", "axis identity", "transpose", "bounds", "out of bounds", "slice a row", "row of a matrix", "partial indexing", "partial application", "currying", "BL8006", "sparse array", "sparse", "symmetric storage", "ragged"],
+    "corpus": ["tests/corpus/index-types/001_compound_construct_index.blade", "tests/corpus/index-types/029_transpose_rank3.blade", "tests/corpus/index-types/289_position_into_tagged_slot_aborts.blade", "tests/corpus/func-arrays/010_fa_t10_dense_row_slice_runtime.blade"],
+    "examples": ["examples/09_qg_atmosphere.blade"],
+    "note": "Index types are the type system's spine: name them (`type LatIdx = Idx<3>`) and build array types from them (`type Field = Array<Float64 like LatIdx, LonIdx>`). Two named index types do not unify even at equal extent. An array IS a curried function of its indices: `T((1 : LatIdx), (0 : LonIdx))` is `T((1 : LatIdx))((0 : LonIdx))`, and the partial read `T((1 : LatIdx))` is a lower-rank view. A subscript into a named index type is either PROVEN (a literal, a cast like `(1 : LatIdx)`, or an iteration index from `range<LatIdx>`) or checked at run time (BL8006) — iterate with `range<I>` / `halo<I, ...>` to get the proofs. Beyond plain Idx the family includes SymIdx / AntisymIdx (triangular storage, derived from comm / anticomm), CompoundIdx (masked cells), SparseIdx (hashed keys, wildcard reads), RaggedIdx and EnumIdx — storage and iteration follow from the index type. `()` is application/indexing; `[]` is ONLY tuple/pack access. `transpose(T, [0, 1])` swaps two axes."
+  },
+  {
+    "intent": "units of measure and dimensional safety",
+    "keywords": ["units", "dimensional analysis", "meters", "seconds", "physical quantity", "unit clash", "SI", "BL3006", "kilograms", "dimension mismatch"],
+    "corpus": ["tests/corpus/units/001_unit_base_declaration.blade", "tests/corpus/units/002_unit_derived.blade", "tests/corpus/units/004_unit_arithmetic.blade", "tests/corpus/unit-errors/001_unit_mismatch_add.blade"],
+    "examples": ["examples/04_trajectory_sensitivity.blade", "examples/01_weather_stations.blade"],
+    "note": "Declare units and derive them: `Unit meters`, `Unit mps = meters / seconds`, then `type Speed = Float<mps>` and `let v: Speed = dist / time`. Adding incompatible units (`dist + time`) is a refusal (BL3006), not a warning — fix the declaration rather than casting around it. The SI set ships in the stdlib (stdlib/units/SI.blade)."
+  },
+  {
+    "intent": "group by a key and aggregate per group",
+    "keywords": ["group by", "aggregate per key", "bucket", "per category", "histogram", "enum key", "per station", "split apply combine", "group_keys"],
+    "corpus": ["tests/corpus/sql-group-by/001_groupby_idx_first.blade", "tests/corpus/sql-group-by/002_groupby_idx_sum_two.blade", "tests/corpus/sql-group-by/004_groupby_enum_first.blade"],
+    "examples": ["examples/01_weather_stations.blade"],
+    "note": "Two steps: `let gk = group_keys(region)` builds the grouping, `group_by(temps, gk)` views the data as groups x members; then map a per-group kernel. A kernel that folds its group annotates the ragged parameter: `lambda(g: Array<Float64 like RaggedIdx<_>>) -> reduce(g, (+))`. Keys may be plain integers, a named Idx, or an EnumIdx; sharing one `gk` binding co-iterates several columns."
+  },
+  {
+    "intent": "build a new leading axis by stacking, or concatenate along an axis",
+    "keywords": ["stack", "concatenate", "append arrays", "join", "new axis", "combine arrays", "vstack", "hstack", "concat"],
+    "corpus": ["tests/corpus/stack-join/001_stack_rank1.blade", "tests/corpus/stack-join/002_stack_rank2_fields.blade", "tests/corpus/stack-join/004_join_leading_axis.blade", "tests/corpus/stack-join/010_join_off_axis_mismatch_rejects.blade"],
+    "examples": ["examples/09_qg_atmosphere.blade"],
+    "note": "`stack(a, b)` adds a FRESH leading axis over same-shaped arrays (rank r to r+1); `join(a, b, 0)` concatenates along an existing dimension (rank preserved, that extent adds; any number of operands before the dimension). A shape disagreement is refused (BL4004) rather than silently truncated."
+  },
+  {
+    "intent": "return several values at once / tuples and destructuring",
+    "keywords": ["tuple", "multiple return", "pair", "destructure", "several outputs", "unpack", "min and max"],
+    "corpus": ["tests/corpus/tuples/001_bare_comma_construction.blade", "tests/corpus/tuples/003_tuple_width_ascription.blade", "tests/corpus/tuple-views/001_tuple_view_flat_3_way.blade", "tests/corpus/func-arrays/007_fa_t7_tuple_of_arrays_return.blade"],
+    "examples": ["examples/03_signal_conditioning.blade"],
+    "note": "A block's last expression can be a tuple, `(lo, hi)`, and the caller destructures it: `let (lo, hi) = min_max([3.0, 1.0, 2.0])`. A bare comma builds a tuple (`let t = 1.0, 2.0`) and binds one (`let p, q = t`); `t[0]` reads a slot — square brackets are tuple/pack access, never array indexing."
+  },
+  {
+    "intent": "compile-time constants and compile-time evaluation",
+    "keywords": ["static", "compile time", "constant", "const", "literal extent", "meta", "array size from a constant", "constexpr"],
+    "corpus": ["tests/corpus/static/001_static_value.blade", "tests/corpus/static/003_static_function.blade", "tests/corpus/static/004_static_dependency_order.blade"],
+    "examples": [],
+    "note": "`let static n = 4` is immutable everywhere and usable where the compiler needs a constant, including extents: `let static t = triangle(n)` then `type Cells = Idx<t>`. `static function triangle(k) = k * (k + 1) / 2` runs at compile time, and static functions MAY mutually recurse (runtime functions may self-recurse but not mutually — BL2001)."
+  },
+  {
+    "intent": "mutable state, reassignment, in-place array updates",
+    "keywords": ["mutable", "let mut", "assign", "reassign", "in place", "mut parameter", "update element", "BL4005", "side effect", "output buffer", "mutable array parameter", "mut param"],
+    "corpus": ["tests/corpus/mutability/003_let_mut_assign.blade", "tests/corpus/mutability/008_compound_assign.blade", "tests/corpus/mutability/009_array_element_assign.blade", "tests/corpus/mutability-errors/001_static_assign_error.blade"],
+    "examples": [],
+    "note": "`let mut count = 0` is reassignable (`count = count + 1`, `count += 2`). A `mut` parameter is ARRAY-only and aliases the caller's array — `function bump(buf: mut Array<Float64 like Idx<3>>) -> Float64 = {` with element writes like `buf(0) = buf(0) + 1.0`; a scalar result is returned instead. A second top-level `let` of the same name is BL2009, and a captured write inside an omp / cuda body is refused (BL4005). Reach for mutation last: running state is a `let rec` array, accumulation is `reduce`."
+  },
+  {
+    "intent": "structs, sum types and pattern matching",
+    "keywords": ["struct", "record", "sum type", "variant", "enum", "match", "pattern matching", "tagged union", "option", "guard"],
+    "corpus": ["tests/corpus/structs/001_struct_declaration.blade", "tests/corpus/sum-types/003_sum_type_match.blade", "tests/corpus/guards/001_guard_with.blade", "tests/corpus/sum-types/009_variant_arm_guard.blade"],
+    "examples": [],
+    "note": "Structs: `struct Point {` with typed fields, built with `Point { x = 1.0, y = 2.0 }` and read with `p.x`. Sum types: `type Result = Ok : Int | Err : Int`, constructed `Ok(100)` and consumed by `match r with` arms such as `| Ok(n) -> n`. An ordinary arm guards with `if` — `| n if n > 10 && n < 20 -> n` — and a failing guard falls through to the next arm."
+  },
+  {
+    "intent": "multi-file programs, modules and imports",
+    "keywords": ["module", "import", "from import", "multiple files", "library", "namespace", "qualified name", "split into files", "stdlib"],
+    "corpus": ["tests/corpus/multifile/006_selective_import_from_import/02_Main.blade", "tests/corpus/multifile/008_mixed_qualified_and_selective_imports/03_Main.blade", "tests/corpus/multifile/002_cross_module_function_import/02_Main.blade", "tests/corpus/modules/002_module_with_declarations.blade"],
+    "examples": ["examples/lsdft.blade"],
+    "note": "A file opens with `module Geometry`; another file imports it qualified (`import Geometry`, then `Geometry.pi`) or selectively (`from Geometry import area`). Stdlib and domain modules import the same way: `from stats import mean, variance, stddev`, `import math as m`. A .blade file is a flat sequence of declarations with no main — bare top-level expressions evaluate and print."
+  },
+  {
+    "intent": "mean, variance, standard deviation",
+    "keywords": ["mean", "average", "variance", "standard deviation", "stddev", "statistics", "stats", "row means"],
+    "corpus": ["tests/corpus/functions/085_stdlib_stats_module.blade", "tests/corpus/functions/158_stdlib_stats_int_and_float32_rows.blade", "tests/corpus/casts/015_extents_idiom.blade"],
+    "examples": ["examples/lsdft.blade"],
+    "note": "`from stats import mean, variance, stddev` (stdlib/stats.blade), then `mean(x)`. They are generic over a rank-1 row, so a named function maps over the rows of a matrix directly: `method_for(B) <@> mean |> compute`. Hand-rolled: `reduce(A, (+)) / Float64(extents(A))` — with the count cast spelled out."
+  },
+  {
+    "intent": "gradient of a scalar loss (reverse-mode automatic differentiation)",
+    "keywords": ["gradient", "grad", "autodiff", "automatic differentiation", "backprop", "derivative", "reverse mode", "loss", "optimization", "training"],
+    "corpus": ["tests/corpus/ad/001_scalar_polynomial.blade", "tests/corpus/ad/007_reduce_grad.blade", "tests/corpus/ad/008_recarray_grad.blade", "tests/corpus/ad/030_halo_stencil_grad_linear.blade", "tests/corpus/ad/008_grad_of_unknown_rejected.blade"],
+    "examples": ["examples/04_trajectory_sensitivity.blade"],
+    "note": "With `import ad as ad`, `ad.grad(f)` returns the value and the derivative for scalar parameters: `let (fv, dfdx) = ad.grad(f)(2.0)`. Array parameters receive their gradient in `let mut` buffers passed after the arguments: `let (hv, dhds) = ad.grad(h)([1.0, 2.0, 3.0], 0.5, dw)` accumulates d/dw into `dw` and returns d/ds. It differentiates through reduce, `let rec` recurrences, gathers and halo stencils; what it cannot differentiate is refused (BL5500), never silently wrong. The forward-mode twin is `ad.jvp(f)(2.0, 1.0)`."
+  },
+  {
+    "intent": "linear algebra: matrix multiply, solve, eigen-decomposition, SVD",
+    "keywords": ["matmul", "matrix multiply", "matrix multiplication", "solve", "eigenvalues", "eigh", "svd", "linear algebra", "blas", "lapack", "decomposition", "dot product", "matrix vector"],
+    "corpus": ["tests/corpus/math/010_matmul_exact.blade", "tests/corpus/math/070_solve_exact_3x3.blade", "tests/corpus/math/020_eigh_diagonal.blade", "tests/corpus/math/013_svd_known_2x2.blade", "tests/corpus/math/059_dot_linalg_dispatch.blade"],
+    "examples": ["examples/09_qg_atmosphere.blade"],
+    "note": "The math module is import-gated: `import math as m`, then `m.matmul(A, B)`, `m.solve(S, rhs)`, `let (Q, LAM) = m.eigh(S)` (plus m.svd, m.eig, m.lu). BLAS routing is derived by the compiler from the expression and the toolchain — never call BLAS by hand. Without the import the names are ordinary identifiers you may define yourself."
+  },
+  {
+    "intent": "random numbers: keyed, reproducible draws",
+    "keywords": ["random", "rng", "uniform", "normal", "gaussian", "seed", "sample", "poisson", "gamma", "noise"],
+    "corpus": ["tests/corpus/rand/001_determinism.blade", "tests/corpus/rand/003_normal_moments.blade", "tests/corpus/rand/012_keyed_families_and_runtime_params.blade", "tests/corpus/rand/019_indexed_uniform_addressed_samples.blade"],
+    "examples": [],
+    "note": "`import rand as r`, then draws are keyed and deterministic: `r.uniform(12345, 4)` is (key, n) and the same key gives the same array; `r.normal(12345, 4)` and the other families follow. There is no hidden global generator state. When the samples must keep their identity under chunking or reordering, use the addressed `_at` forms instead."
+  },
+  {
+    "intent": "parallelism: license OpenMP threading instead of writing pragmas",
+    "keywords": ["parallel", "openmp", "omp", "threads", "multithreading", "pragma", "speed up", "parallel reduce", "BL4016", "data race"],
+    "corpus": ["tests/corpus/index-types/237_ragged_peel_omp_licence.blade", "tests/corpus/diagnostics/049_fold_omp_needs_license.blade", "tests/corpus/inference-probes/020_parallel_omp_cuda_mutual_exclusion_rejects.blade"],
+    "examples": ["examples/lsdft.blade", "examples/lswosa.blade"],
+    "note": "Parallelism is a LICENSE on the kernel, never a hand-placed pragma: `lambda(e) where omp(e: 1) -> e * 2.0` licenses threading over that argument's axis (the number is a depth cap). A parallel fold must also be reorderable: `lambda(a, b) where comm(a, b), omp -> a + b` is accepted, while `lambda(a, b) where omp -> a - b` is refused (BL4016). The compiler derives pragma placement; a write to a captured binding inside an omp body is refused (BL4005)."
+  },
+  {
+    "intent": "relational operators: semijoin, sort, unique, set operations, foreign-key gather",
+    "keywords": ["join tables", "semijoin", "antijoin", "sort", "order by", "unique", "distinct", "contains", "in list", "union", "intersect", "foreign key", "lookup", "gather", "sql"],
+    "corpus": ["tests/corpus/sql-semijoins/001_semijoin_preserves_multiplicity.blade", "tests/corpus/sql-sort/001_sort_ascending.blade", "tests/corpus/sql-unique-contains/001_unique_basic.blade", "tests/corpus/sql-set-ops/005_intersect_dedups_a.blade", "tests/corpus/sql-foreign-keys/011_fk_deref_in_range.blade"],
+    "examples": ["examples/01_weather_stations.blade"],
+    "note": "Semijoin (WHERE x IN B): `compound(A, mask(A, lambda(x) -> contains(B, x)))`. `unique(A)` keeps first occurrences; `sort(F, lambda(x) -> x)` sorts by a key kernel. A foreign key is a column of indices into another table — type it `Array<Nat<RegionIdx> like StationIdx>` and the gather `lambda(r) -> region_weight(r)` is bounds-proven. `intersect(A, B)` and `union(A, B)` are the deduplicating set operations; combining filters over ONE index space is mask algebra (`let mid = big && small`, then `compound(F, mid)`)."
+  },
+  {
+    "intent": "FFT, power spectrum, polyspectra",
+    "keywords": ["fft", "fourier", "spectrum", "power spectrum", "frequency", "ifft", "bispectrum", "spectral", "fft2"],
+    "corpus": ["tests/corpus/spectra/010_fft_impulse_n8.blade", "tests/corpus/spectra/015_fft_ifft_roundtrip_n8.blade", "tests/corpus/spectra/020_power_cosine_n8.blade", "tests/corpus/spectra/044_fft2_impulse_4x4.blade"],
+    "examples": ["examples/09_qg_atmosphere.blade", "examples/lswosa.blade"],
+    "note": "The spectra module is import-gated: `import spectra as sp`, then `sp.fft(x)` (complex output) and `sp.power(x)`; ifft, fft2/ifft2 and the polyspectra formers follow the same pattern. The argument must be a variable naming a `let` with a full Array annotation — the transform reads the declared shape, and an inline literal is refused (BL5400)."
+  },
+  {
+    "intent": "conditional gating and failover between computations",
+    "keywords": ["guard", "conditional computation", "fallback", "failover", "default value", "choice", "<|>", "enable flag", "coalesce"],
+    "corpus": ["tests/corpus/guard-combinators/005_guard_computation.blade", "tests/corpus/guard-combinators/009_guard_false_computation.blade", "tests/corpus/deferred-concrete/003_choice_over_arrays.blade"],
+    "examples": ["examples/03_signal_conditioning.blade"],
+    "note": "`guard(enabled, L <@> f) |> compute` runs the computation when the flag holds and yields zeros of the same shape otherwise. `(A <|> B) |> compute` is elementwise failover: the left value where it is nonzero, else the right. Both are combinators over loop objects, so they compose with the rest of a pipeline."
   },
   {
     "intent": "probabilistic moments, comoments, distributions",
-    "keywords": ["moments", "comoment", "cumulant", "distribution", "probability", "ppl", "expectation", "variance"],
+    "keywords": ["moments", "comoment", "cumulant", "distribution", "probability", "ppl", "expectation", "variance", "bayes", "uncertainty propagation"],
     "corpus": ["tests/corpus/ppl/001_moments_pair.blade", "tests/corpus/ppl/003_moments_mean.blade", "tests/corpus/ppl/004_comoments_pair.blade"],
-    "examples": ["examples/02_portfolio_moments.blade"],
-    "note": "The ppl surface provides moment/comoment formers; order-2 formers route to `gram(A, A)` so they inherit BLAS."
+    "examples": ["examples/02_portfolio_moments.blade", "examples/05_streaming_telemetry.blade"],
+    "note": "`import ppl as ppl`, then the formers: `ppl.moments(A, 2)` and `ppl.comoments(A, 2)` fiber along the sample (last) axis and return PACKED symmetric storage — the former elaborates to a `where comm` kernel over (A, A), so symmetry is derived, not hand-written. docs/features/ppl.md covers the Dist algebra, pushforwards and inference; examples/physics is a 47-program corpus built on it."
+  },
+  {
+    "intent": "equivariant neural networks: irreps, certified equivariance",
+    "keywords": ["equivariant", "irreps", "e3nn", "tensor product", "spherical harmonics", "clebsch-gordan", "O3", "SO3", "message passing", "neural network"],
+    "corpus": ["tests/corpus/ml-equiv/001_certified_identity.blade", "tests/corpus/ml-equiv/002_certified_pipeline.blade", "tests/corpus/ml-ops/001_op_values.blade", "tests/corpus/ml-equiv/004_hadamard_rejected.blade"],
+    "examples": ["examples/06_cg_selection_rules.blade", "examples/07_subgrid_closure_discovery.blade"],
+    "note": "`import ml as ml`; a representation is a static irreps spec used as an index type: `let static S = [(0, 0, 2), (1, 1, 1)]` and `Array<Float like IrrepsIdx<S>>`. A function claims equivariance with `where ml.equiv(O3)` and the compiler CERTIFIES it — an operation that breaks the symmetry (a raw index, an uncertified nonlinearity) is a compile error. See docs/features/equivariant-nn.md."
+  },
+  {
+    "intent": "tree-shaped data / hierarchical paths (static trees)",
+    "keywords": ["tree", "hierarchy", "nested structure", "TreeIdx", "leaves", "path", "graph", "parent child", "octree"],
+    "corpus": ["tests/corpus/trees/100_treeidx_construct_crystal.blade", "tests/corpus/trees/101_treeidx_read_crystal_paths.blade", "tests/corpus/trees/123_leaves_method_for_map.blade", "tests/corpus/trees/113_treeidx_method_for_refuses.blade"],
+    "examples": [],
+    "note": "A static tree is an index type over a compile-time shape: `let static crystal = [2, 2, 0, 0, 3, 0, 0, 0]`, `type CrystalIdx = TreeIdx<crystal>`. Storage is the flat pool of LEAVES in preorder; a whole root-to-leaf path reads one cell, `T((1, 2))`. Bulk numerics go through `leaves(T)`, an ordinary dense array: `method_for(leaves(T)) <@> lambda(x) -> x * 2.0 |> compute`, `reduce(leaves(T), (+))` — method_for over the tree itself is refused (BL4003). Graphs need no index type: adjacency data plus `let rec` walks (docs/features/graphs-trees.md)."
+  },
+  {
+    "intent": "integer overflow, division by zero, and float-to-int conversion semantics",
+    "keywords": ["overflow", "wraparound", "divide by zero", "integer division", "modulo", "nan to int", "BL8013", "BL8014", "arithmetic semantics", "integer power"],
+    "corpus": ["tests/corpus/basic/067_int_div_by_zero_aborts.blade", "tests/corpus/basic/071_int_pow_negative_exponent_aborts.blade", "tests/corpus/casts/017_float_to_int_nan_aborts.blade", "tests/corpus/recursive-arrays/022_int64_overflow_wraps_in_recurrence.blade"],
+    "examples": [],
+    "note": "One contract in every lane (docs/formalism.md section 2.4): integers WRAP on overflow; integer `7 / 2` and `7 % 2` are integer operations, and by zero they abort (BL8013), as does a negative integer exponent (`2 ^ 10` is exact); a float-to-int cast of NaN or an out-of-range value aborts (BL8014). For real division convert first: `Float64(7) / 2.0`."
+  },
+  {
+    "intent": "read a NetCDF / Zarr / CSV dataset (files as type providers)",
+    "keywords": ["netcdf", "zarr", "csv", "icechunk", "read a file", "load data", "dataset", "open a file", "io", "input file", "era5", "type provider"],
+    "corpus": [],
+    "examples": ["examples/09_qg_atmosphere.blade", "examples/physics/43_cleaning_the_spikes.blade", "examples/tools/check_cod_shells.blade"],
+    "note": "A file is a TYPE PROVIDER: `import zarr as z`, then `let store = z.load(\"data/qg_init_zarr\")` reads the store's METADATA at compile time and mints index types from it (`type X = store.index.x`), so a variable arrives already typed, with static extents: `let QR0: Array<Float64 like Y, X> = store.vars.q_rossby |> z.read`. NetCDF (`import netcdf as nc`, `nc.load(\"era5.nc\")`), CSV and Icechunk follow the same load / index / vars / read shape (docs/formalism.md section 3.8). A relative path is read at COMPILE time against the directory you compile in — examples/09 is run from its own directory — and when it does not resolve there the index types lose their static extents, so the failure shows up as an indirect error further down rather than as file-not-found. These providers have no tests/corpus directory (their tests run as `blade test netcdf|zarr|csv|icechunk`), so the worked examples are the reference."
   },
   {
     "intent": "plot or emit a rich display frame",
-    "keywords": ["plot", "chart", "figure", "display", "visualize", "image", "graph"],
-    "corpus": ["tests/corpus/display/001_emit_frames.blade"],
+    "keywords": ["plot", "chart", "figure", "display", "visualize", "image", "line plot", "heatmap", "contour", "scatter"],
+    "corpus": ["tests/corpus/display/003_plot_contourf.blade", "tests/corpus/display/004_plot_factory_slots.blade", "tests/corpus/display/012_plot_stream.blade", "tests/corpus/display/001_emit_frames.blade"],
     "examples": [],
-    "note": "`import plot` from the stdlib; display frames ride the eval response and appear as image content in blade_eval."
+    "note": "`import plot` (stdlib/plot.blade): `plot.line(x, y, \"parabola\": title)`, and likewise scatter, contour, contourf, heatmap and the live `plot.stream(\"loss\", x, y)`. Options are quantity-tagged slots (value: slot) in any order. Each call emits ONE display frame and evaluates to true; the frames ride the eval response and blade_eval returns them as image content."
+  },
+  {
+    "intent": "write a corpus test / pin expected values, errors and warnings",
+    "keywords": ["write a test", "corpus test", "EXPECT", "pin", "regression test", "ERROR pin", "WARN pin", "rejects", "aborts", "NOPINS", "test conventions"],
+    "corpus": ["tests/corpus/casts/015_extents_idiom.blade", "tests/corpus/diagnostics/045_for_in_removed.blade", "tests/corpus/casts/014_implicit_warning.blade", "tests/corpus/basic/067_int_div_by_zero_aborts.blade", "tests/corpus/index-types/025_ragged_multi_array_rejects.blade", "tests/corpus/multifile/006_selective_import_from_import/02_Main.blade", "tests/corpus/arity/012_arity_return_type.blade"],
+    "examples": [],
+    "note": "One .blade file per test; every assertion is a comment (grammar: blade-docs://corpus-readme). `// TEST: <exact test name>` is the required first line, and a name ending in (rejects) or (aborts) marks a probe that PASSES when the compiler refuses / the program aborts. Value pins: `// EXPECT: <var> = <value>`. Refusals: `// ERROR: BLxxxx [@ l:c[-l:c]]`, `// ERROR-CONTAINS: <substring>`, `// REJECT-AT: lower | codegen`. Runtime aborts: `// ABORT: <substring>`. Warnings: `// WARN: BLxxxx` and `// WARN-CODEGEN: <substring>` are strict in BOTH directions (an unpinned warning fails, and so does a pin that never fires). A value test that pins nothing must say `// NOPINS: <reason>`. Multi-file tests are a directory of module files, each with `// MODULE: <module file name>`. The listed files show one of each."
   }
 ]

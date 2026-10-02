@@ -4,7 +4,7 @@
       "command": "node",
       "args": ["C:/Users/cdupu/Documents/GitHub/Blade-MCP/src/index.js"],
       "env": {
-        "BLADE_EXE": "C:/Users/cdupu/Documents/GitHub/Blade/bin/Release/net7.0/Blade.exe",
+        "BLADE_EXE": "C:/Users/cdupu/Documents/GitHub/Blade/bin/Release/net10.0/Blade.exe",
         "BLADE_REPO": "C:/Users/cdupu/Documents/GitHub/Blade"
       }
     }
